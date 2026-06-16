@@ -67,8 +67,8 @@ Cada Localização tem um clima que muda ao longo do tempo (determinístico e co
 
 ## 4. O Sistema de Automação de Inventário
 
-* **Filtros de Triagem Inteligente:** Descarte ou venda automática condicional programada pelo jogador (ex: "vender comuns imediatamente").
-* **O Pet Transportador (Courier):** Esvazia a mochila periodicamente levando os itens para o Stash no Porto. Pode ser aprimorado via Skill Tree (maior capacidade e menor tempo de viagem).
+* **Filtros de Triagem Inteligente:** regras condicionais por **categoria, raridade e valor mínimo** (ex.: "vender comuns", "guardar troféus", "vender abaixo de X ouro").
+* **O Pet Transportador (Courier):** esvazia a mochila periodicamente levando os itens ao Stash. Há **vários pets colecionáveis**, cada um com características próprias; o jogador ativa um por vez. As melhorias da Skill Tree (ex.: "+5% de velocidade dos pets") são **globais** e afetam todos os pets — abrindo espaço para cosméticos, variações e progressão logística.
 
 ---
 
@@ -78,7 +78,7 @@ Cada Localização tem um clima que muda ao longo do tempo (determinístico e co
 O jogador não é genérico; ele escolhe ou foca em uma Especialização, alterando seu estilo de jogo:
 * **Brutamontes (Bruiser):** Foco em Força de Puxada. Derrota peixes grandes rapidamente, mas desgasta seus equipamentos muito mais rápido.
 * **Estrategista/Trapper:** Aumenta a velocidade de atração (peixes mordem em menos tempo) e possui chance de "Pesca Dupla" (trazer dois peixes menores de uma vez). Ideal para farmar materiais.
-* **Místico:** Usa mana/energia para encantar a isca. Tem bônus massivo para encontrar peixes de alta raridade e ignora parcialmente as penalidades de clima ruim.
+* **Místico:** Bônus passivo massivo de raridade (Sorte) e ignora parcialmente as penalidades de clima ruim. *(A "mana/energia" é sabor temático — não há recurso ativo a gerenciar; os bônus são passivos, mantendo o modelo determinístico.)*
 
 ### 5.2. Runas e Modificadores de Equipamento
 Equipamentos possuem *Slots*. O jogador pode engastar Runas para afinar a build perfeitamente:
@@ -142,9 +142,19 @@ Se o peixe não é capturado (poder insuficiente e Sorte não procou), o persona
 * **Mochila cheia:** se o Pet não dá conta, a **pesca trava** até liberar espaço → teto natural de rendimento e razão real para investir no Pet (intervalo menor / capacidade maior via Skill Tree).
 * **Stash:** finito; contam para o limite **materiais, troféus e equipamentos**.
 
-### 6.7. Troféus e Aquário
-* Apenas **troféus** são itens individuais (cada um sorteia **peso e qualidade**); comuns e materiais são contagens fungíveis por espécie.
-* O Aquário guarda o **melhor troféu por espécie**. O bônus global escala em **faixas de qualidade** (ex.: Comum / Ótimo / Perfeito), criando a caça ao "espécime perfeito".
+### 6.7. Troféus por Tamanho e Aquário
+* Cada espécie tem um **tamanho mínimo e máximo** configurado na base. Na captura o servidor **sorteia o peso por uma Distribuição Normal (curva de Gauss)** centrada no tamanho médio — a maioria dos peixes sai perto da média e os espécimes grandes (troféus) são naturalmente raros. A fração desse peso em relação ao **máximo** decide o destino do peixe:
+  * **< 80%** → não é troféu: **auto-venda** por ouro (peixes comerciais/`vendor`).
+  * **≥ 80%** → vira **troféu** (instância individual), em faixas:
+    | Faixa | % do tamanho máximo |
+    |---|---|
+    | Comum | ≥ 80% |
+    | Raro | ≥ 85% |
+    | Épico | ≥ 90% |
+    | Lendário | ≥ 95% |
+    | Perfeito | 100% (o chase supremo) |
+* O troféu guarda **peso, faixa (qualidade) e o local de captura** no Stash. Comuns e materiais seguem sendo contagens fungíveis por espécie.
+* O Aquário guarda o **melhor troféu por espécie**; o bônus global escala pela faixa de qualidade, criando a caça ao "espécime perfeito".
 
 ### 6.8. Sessão e Build
 A build é **congelada no início da sessão**. Trocar classe, runas, equipamento ou isca exige **voltar ao porto/menu**, o que encerra a sessão atual e inicia uma nova (com nova seed e novo snapshot). Isso mantém o determinismo e o anti-cheat íntegros.
@@ -179,6 +189,7 @@ Consome restos (escamas, espinhos, óleos) para sintetizar iscas. Duas famílias
 ### 7.5. Progressão (XP e Skill Tree)
 * Pescar concede **XP** (inclusive no progresso offline). Subir de **nível** concede **pontos de Skill Tree**.
 * A Skill Tree aprimora atributos, melhora o Pet, reduz desgaste e multiplica bônus do Aquário.
+* Estrutura: **árvore com ramos por pilar** (Pesca, Logística/Pet, Sorte, Aquário), com nós e pré-requisitos lineares dentro de cada ramo. Os bônus de Pet são **globais** (afetam todos os pets colecionados).
 
 ### 7.6. Oferenda no Aquário
 Registrar um troféu recalcula os buffs globais (`CalculateTotalStats`) e guarda o **melhor por espécie** (por faixa de qualidade).
@@ -206,3 +217,29 @@ Registrar um troféu recalcula os buffs globais (`CalculateTotalStats`) e guarda
 
 ### 8.5. Baseline do Modo Desligado
 A média de Ouro/XP por hora do **jogo desligado** (seção 6.1) é derivada da **melhor Localização já alcançada** pelo jogador.
+
+---
+
+## 9. Batalha de Boss (Decisões Travadas)
+
+A Batalha de Boss é o momento **ativo** do jogo — o contraste com o farm idle. É um **cabo de guerra em tempo real** onde o jogador realmente joga.
+
+### 9.1. Invocação
+* Com a **isca de boss equipada**, o próximo encontro na pesca (em qualquer Localização do Mundo atual) é o **Act Boss** — a sessão de pesca comum é substituída pela batalha.
+* A isca de boss é **consumida ao iniciar** a batalha. Perder = isca gasta (farmar/sintetizar outra). Stakes reais.
+
+### 9.2. Mecânica: Gestão de Tensão
+* O jogador **segura para recolher** (drena a estamina do boss, mas **sobe a tensão da linha**) e **solta para aliviar** (a tensão cai).
+* O boss **enfurece em ciclos** (seedados): durante a fúria, a força do boss dispara e a tensão sobe muito mais rápido ao recolher — é preciso **soltar na hora certa**.
+* Fases de **exaustão** do boss abrem janelas seguras para recolher agressivamente.
+* As **Runas de sangramento** drenam estamina do boss passivamente durante toda a luta.
+* A **build define os parâmetros:** FishingPower/ReelForce (velocidade de drenagem), LineTension (limite de tensão), runas (sangramento), flexibilidade da vara (amortece picos).
+
+### 9.3. Vitória e Derrota
+* **Vitória:** zerar a estamina do boss.
+* **Derrota:** a **tensão estoura o limite** (LineTension) → a linha arrebenta. A tensão é o recurso central a gerir.
+
+### 9.4. Tiers e Repetição
+* A **isca de boss carrega um tier:** sintetizar um tier maior (mais materiais/raros) invoca um boss mais forte com **drops melhores**.
+* O Act Boss é **repetível:** após desbloquear o Mundo, o jogador escolhe o tier que quer enfrentar — **farmar drops** num tier acessível ou **desafiar** um tier alto.
+* **Primeira vitória** no Mundo → desbloqueia o próximo Mundo (progressão). Re-batalhas dão **drops escalados pelo tier** (equipamentos, runas, materiais e troféu do boss).
