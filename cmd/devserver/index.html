@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fishing Heroes — Dev Client</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+         background: #0e1116; color: #d6deeb; }
+  header { padding: 12px 16px; background: #161b22; border-bottom: 1px solid #2b3340;
+           display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 15px; margin: 0; color: #7fdbca; font-weight: 600; }
+  .bar { display: flex; gap: 6px; flex-wrap: wrap; }
+  button { background: #21283180; color: #d6deeb; border: 1px solid #2b3340; border-radius: 6px;
+           padding: 6px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+  button:hover { background: #2b3340; border-color: #3b4756; }
+  button.primary { border-color: #2d6; color: #7fdbca; }
+  button.danger  { border-color: #b3506b; color: #ff869a; }
+  button.on      { background: #1d3b2a; border-color: #2d6; color: #b8f5d0; }
+  #status { font-size: 12px; color: #8a98ad; margin-left: auto; }
+  main { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 12px; }
+  section { background: #11161d; border: 1px solid #2b3340; border-radius: 8px; min-height: 38vh; }
+  section.feed { grid-column: 1 / -1; min-height: 30vh; }
+  section h2 { font-size: 12px; margin: 0; padding: 8px 12px; color: #8a98ad;
+               border-bottom: 1px solid #2b3340; text-transform: uppercase; letter-spacing: .5px;
+               display: flex; justify-content: space-between; }
+  pre { margin: 0; padding: 12px; font-size: 12px; line-height: 1.45; overflow: auto;
+        white-space: pre-wrap; word-break: break-word; max-height: 46vh; }
+  #feed { margin: 0; padding: 8px 12px; font-size: 12px; line-height: 1.6; overflow: auto; max-height: 28vh; }
+  .ev { white-space: pre; }
+  .catch  { color: #b8f5d0; } .escape { color: #8a98ad; }
+  .trophy { color: #ecc48d; } .broke { color: #ff869a; }
+  .k { color: #c792ea; } .s { color: #ecc48d; } .n { color: #f78c6c; } .b { color: #82aaff; }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎣 Fishing Heroes — Dev Client</h1>
+  <div class="bar">
+    <button class="primary" onclick="tick()">Tick (agora)</button>
+    <button onclick="ff(60)">+1min</button>
+    <button onclick="ff(600)">+10min</button>
+    <button onclick="ff(3600)">+1h</button>
+    <button onclick="ff(28800)">+8h</button>
+    <button id="wsBtn" onclick="wsToggle()">WS: OFF</button>
+    <button class="danger" onclick="reset()">Reset</button>
+  </div>
+  <span id="status">—</span>
+</header>
+
+<main>
+  <section><h2>Sessão</h2><pre id="session"></pre></section>
+  <section><h2>Jogador (acumulado)</h2><pre id="player"></pre></section>
+  <section><h2>Último Resolve (delta)</h2><pre id="last"></pre></section>
+  <section class="feed">
+    <h2><span>Feed ao vivo (WebSocket)</span><button onclick="clearFeed()">limpar</button></h2>
+    <div id="feed"></div>
+  </section>
+</main>
+
+<script>
+let ws = null;
+
+function hl(obj) {
+  const json = JSON.stringify(obj ?? {}, null, 2).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  return json.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(\.\d+)?([eE][+-]?\d+)?)/g,
+    (m) => {
+      let cls = "n";
+      if (/^"/.test(m)) cls = /:$/.test(m) ? "k" : "s";
+      else if (/true|false|null/.test(m)) cls = "b";
+      return `<span class="${cls}">${m}</span>`;
+    }
+  );
+}
+
+function render(state) {
+  document.getElementById("session").innerHTML = hl(state.session);
+  document.getElementById("player").innerHTML = hl(state.player);
+  document.getElementById("last").innerHTML = hl(state.lastResult || { info: "nenhum resolve ainda" });
+  const s = state.session;
+  document.getElementById("status").textContent =
+    `clima=${s.weatherAgora} · resolvido=${s.resolvidoSeg.toFixed(0)}s / real=${s.tempoRealSeg.toFixed(0)}s · ` +
+    `dur=${s.durabilidade.toFixed(0)}${s.quebrado ? " (QUEBRADO)" : ""} · isca=${s.iscaCargas}${s.iscaBasica ? " (básica)" : ""}`;
+  // Eventos vindos via HTTP (bursts de fast-forward) também alimentam o feed.
+  if (state.recentEvents) state.recentEvents.forEach(appendFeed);
+}
+
+function feedLine(ev) {
+  const t = `[${ev.atSec.toFixed(0).padStart(6)}s]`;
+  if (ev.kind === "catch") {
+    let detail = "", cls = "catch";
+    if (ev.trophy) { detail = `🏆 ${ev.trophy.quality} ${ev.trophy.weight.toFixed(1)}kg`; cls = "trophy"; }
+    else if (ev.gold) detail = `+${ev.gold} ouro`;
+    else if (ev.material) detail = `material ${ev.material}`;
+    const broke = ev.broke ? ` <span class="broke">⚠ quebrou</span>` : "";
+    return `<span class="${cls}">${t} 🎣 ${ev.fish} (${ev.weather}) ${detail}</span>${broke}`;
+  }
+  return `<span class="escape">${t} ✗ escapou ${ev.fish} (${ev.weather})</span>`;
+}
+
+function appendFeed(ev) {
+  const feed = document.getElementById("feed");
+  const div = document.createElement("div");
+  div.className = "ev";
+  div.innerHTML = feedLine(ev);
+  feed.prepend(div);
+  while (feed.childNodes.length > 250) feed.removeChild(feed.lastChild);
+}
+const clearFeed = () => (document.getElementById("feed").innerHTML = "");
+
+async function api(path) {
+  try {
+    const r = await fetch(path, { method: "POST" });
+    render(await r.json());
+  } catch (e) { document.getElementById("status").textContent = "erro: " + e; }
+}
+const tick  = () => api("/api/resolve");
+const ff    = (s) => api("/api/resolve?seconds=" + s);
+const reset = () => api("/api/reset");
+
+function wsToggle() {
+  const btn = document.getElementById("wsBtn");
+  if (ws) { ws.close(); return; }
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen  = () => { btn.textContent = "WS: ON"; btn.classList.add("on"); };
+  ws.onclose = () => { ws = null; btn.textContent = "WS: OFF"; btn.classList.remove("on"); };
+  ws.onerror = () => { document.getElementById("status").textContent = "erro no WebSocket"; };
+  ws.onmessage = (m) => {
+    const msg = JSON.parse(m.data);
+    if (msg.type === "state") render(msg.state);
+    else if (msg.type === "event") appendFeed(msg.event);
+  };
+}
+
+// estado inicial + conecta o WS automaticamente
+fetch("/api/state", { method: "POST" }).then(r => r.json()).then(render);
+wsToggle();
+</script>
+</body>
+</html>
