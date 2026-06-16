@@ -30,15 +30,20 @@ graph TD
 
 1. **Preparação:** O jogador escolhe sua Classe, equipa vara, molinete e linha (modificados com Runas) e fabrica a isca alquímica adequada para o Boss ou peixe raro desejado.
 2. **Expedição:** Entra em um mundo prestando atenção ao **Clima Dinâmico** da zona.
-3. **Pescaria Passiva:** O jogo simula o combate (cabo de guerra), aplicando Efeitos de Status (sangramento, fúria) de acordo com o equipamento e tipo do peixe.
+3. **Pescaria Passiva:** na pesca comum, o servidor **resolve cada captura de forma determinística** (poder × dificuldade, com a Sorte como modificador). O combate ativo de cabo de guerra com Efeitos de Status fica reservado à **Batalha de Boss** (seção 3).
 4. **Gerenciamento de Carga:** Automação via Pet e Filtros de inventário.
 5. **Desenvolvimento no Porto:** Converter peixes em Ouro, forjar/sintetizar equipamentos, fabricar iscas por Alquimia e exibir raridades no Aquário Monumental.
 
 ---
 
-## 3. Mecânica de Pesca (Cabo de Guerra Simulado e Dinâmico)
+## 3. Mecânica de Pesca
 
-A batalha de cabo de guerra é o coração do jogo, afetada por equipamentos, classes e condições globais:
+O jogo tem **dois modos de pesca**:
+
+* **Pesca comum (isca comum):** modelo **determinístico** com a Sorte como modificador. É o loop principal de farm, detalhado na seção 6. Suporta progresso offline.
+* **Batalha de Boss (isca alquímica do mundo):** sistema à parte, ainda em definição, com combate mais ativo (cabo de guerra, status effects). Disparado ao entrar na zona com a isca de boss equipada.
+
+Os atributos abaixo afetam ambos os modos:
 
 ### Atributos do Pescador
 * **Força do Personagem:** Poder muscular. Drena a estamina do peixe.
@@ -54,9 +59,9 @@ A batalha de cabo de guerra é o coração do jogo, afetada por equipamentos, cl
   * *Sangrando:* Aplicado por Runas do jogador; o peixe perde estamina passivamente ao longo da luta.
 
 ### Clima Dinâmico e Eventos Ambientais
-As Zonas de Pesca sofrem alterações climáticas globais temporárias. Exemplo:
+Cada Localização tem um clima que muda ao longo do tempo (determinístico e compartilhado — ver seção 8.3). Exemplo:
 * **Tempo Limpo:** Condições normais.
-* **Tempestade:** Aumenta a agressividade de todos os peixes (maior força de fuga, consumindo mais durabilidade do jogador), mas dobra a chance de pescar criaturas Lendárias e permite o encontro com Chefes de Estágio (Bosses).
+* **Tempestade:** Aumenta a agressividade dos peixes (maior força de fuga, consumindo mais durabilidade do jogador), mas dobra a chance de pescar criaturas Lendárias e permite o encontro com Chefes de Estágio (Bosses).
 
 ---
 
@@ -94,3 +99,110 @@ Em vez de vender todos os peixes lendários por ouro, o jogador pode fazer uma *
 ### 5.5. Categorias de Peixes e Skill Tree
 * **Categorias de Peixe:** Comerciais (Gold), Crafting (Vara/Linha), Alquímicos (Iscas Especiais) e Troféus (Aquário).
 * **Skill Tree (Árvore de Habilidades):** Aprimora atributos, desbloqueia/melhora o Pet, reduz perdas de durabilidade global e multiplica bônus recebidos pelo Aquário.
+
+---
+
+## 6. Especificações Mecânicas (Decisões Travadas)
+
+Esta seção consolida as regras já fechadas para a **pesca com isca comum**. A Batalha de Boss é um sistema à parte, ainda em definição.
+
+### 6.1. Modelo de Resolução e os Dois Estados Passivos
+Há **dois estados passivos distintos**:
+
+* **Idle (jogo aberto) — o foco do jogo.** A pesca comum roda a simulação **determinística e seedada** completa: cada evento (mordida, spawn, captura, luta) é resolvido de verdade. Só aqui saem **peixes, troféus, materiais, drops e XP detalhado**. O resultado é função pura de `(build, zona, seed, índice do evento)` — o tempo decide apenas *quantos* eventos ocorrem.
+* **Jogo desligado (app fechado) — recompensa de catch-up.** Não simula eventos. Calcula uma **média de Ouro e XP por hora** baseada na **melhor Localização** que o jogador alcançou, reduzida por **X%** (X melhora com upgrades), aplicada às **primeiras 8 horas** entre logout e login. **Não gera peixes, troféus, materiais nem drops** — só ouro e XP.
+
+> Isso incentiva deliberadamente deixar o jogo **aberto em Idle** (o foco): só nesse estado se obtém itens, troféus e drops. O modo desligado é um consolo proporcional e sempre inferior.
+
+### 6.2. Ciclo de um Evento de Pesca
+1. **Mordida:** após um intervalo aleatório (seedado) em **[X, 3X]**, onde X é reduzido por classe (Trapper), atributos de build, equipamentos e runas.
+2. **Spawn:** o peixe é sorteado na tabela da zona, com a raridade enviesada pela Sorte.
+3. **Captura:** determinística — se `Poder de Pesca ≥ Força Exigida`, captura. Caso contrário, a **Sorte** pode resgatar.
+4. **Luta:** duração proporcional à estamina do peixe ÷ poder do jogador → builds mais fortes lutam mais rápido e pescam mais por hora.
+5. **Recompensas e consumo:** a captura concede ouro/material/troféu (conforme a categoria) e **XP**; consome 1 carga da isca consumível (ou durabilidade da isca durável) e pode, raramente, dropar **equipamento ou runa**.
+
+### 6.3. Sorte (Dois Atributos)
+A Sorte é dividida em dois stats independentes, que agem tanto no **resgate de captura** quanto no **enviesamento de spawn**:
+* **Luck Chance:** probabilidade de *proc* (gatilho do efeito).
+* **Luck Power:** magnitude do efeito (`+Y` de força no resgate; intensidade do upgrade de raridade no spawn).
+
+Isso cria arquétipos distintos: builds "azaradas-mas-poderosas" (Power alto, Chance baixa) procam raramente, mas com efeito forte; builds "sortudas" (Chance alta) procam o tempo todo com efeito menor.
+
+### 6.4. Escape
+Se o peixe não é capturado (poder insuficiente e Sorte não procou), o personagem fica **"preso" por 50% do tempo de luta**, mesmo com o peixe já tendo fugido. Esse tempo é **redutível** por equipamentos, build e Skill Tree → "redução de tempo preso" é um atributo de build desejável.
+
+### 6.5. Durabilidade e Reparo
+* Cada captura consome durabilidade (o **Brutamontes** consome mais rápido).
+* Ao zerar, o equipamento entra em **modo quebrado**: o poder cai drasticamente → mais escapes e lutas mais longas (punição emergente, sem regra extra).
+* O jogador pode ativar **auto-reparo**, que conserta automaticamente consumindo ouro e materiais a um **custo elevado** (dreno opcional por conveniência).
+
+### 6.6. Logística de Inventário
+* **Peixes comerciais (ouro):** auto-vendidos no instante da captura; nunca ocupam mochila ou stash.
+* **Materiais e troféus:** vão para a mochila até o **Pet** transportá-los ao Stash.
+* **Mochila cheia:** se o Pet não dá conta, a **pesca trava** até liberar espaço → teto natural de rendimento e razão real para investir no Pet (intervalo menor / capacidade maior via Skill Tree).
+* **Stash:** finito; contam para o limite **materiais, troféus e equipamentos**.
+
+### 6.7. Troféus e Aquário
+* Apenas **troféus** são itens individuais (cada um sorteia **peso e qualidade**); comuns e materiais são contagens fungíveis por espécie.
+* O Aquário guarda o **melhor troféu por espécie**. O bônus global escala em **faixas de qualidade** (ex.: Comum / Ótimo / Perfeito), criando a caça ao "espécime perfeito".
+
+### 6.8. Sessão e Build
+A build é **congelada no início da sessão**. Trocar classe, runas, equipamento ou isca exige **voltar ao porto/menu**, o que encerra a sessão atual e inicia uma nova (com nova seed e novo snapshot). Isso mantém o determinismo e o anti-cheat íntegros.
+
+---
+
+## 7. Economia e Sistemas de Menu (Decisões Travadas)
+
+### 7.1. Moeda
+Economia de **moeda única (Ouro)** — sem moeda premium nesta fase.
+* **Fontes:** venda automática de peixes comerciais (principal) e venda de excedentes/materiais.
+* **Sinks:** auto-reparo, crafting, re-forja (reroll), troca de runas, alquimia e Skill Tree (se aplicável).
+
+> Como não há válvula premium, o balanço de ouro é crítico: os sinks (auto-reparo caro, re-forja) precisam absorver a inflação gerada pela venda contínua de comerciais.
+
+### 7.2. Crafting de Equipamento (Híbrido)
+* A receita garante o **tipo e a raridade base**; os **atributos têm rolagem aleatória** (server-seeded — o cliente não pode re-rolar).
+* O **chase de endgame** é perseguir o "item perfeito".
+* Existe **re-forja dedicada**, que re-rola os stats do item atual consumindo materiais/ouro (principal sink de endgame), além de fabricar do zero.
+* Fonte de equipamento: **crafting + drops raros da pesca**.
+
+### 7.3. Runas e Engaste
+* Runas vêm de **drops da pesca/bosses e/ou síntese**.
+* O engaste é **reversível e seguro**: trocar runas é livre (com possível custo de ouro como sink leve). Sem risco de perda → o jogador experimenta builds à vontade.
+
+### 7.4. Alquimia de Iscas
+Consome restos (escamas, espinhos, óleos) para sintetizar iscas. Duas famílias:
+* **Iscas consumíveis (cargas):** gastam **1 carga por peixe**; um craft rende um lote grande (ex.: ~500 cargas). Ao zerar, **auto-recarregam do estoque**; sem estoque, a pesca **não trava** — cai para uma **isca básica** (perfil de spawn/velocidade pior). Geram demanda contínua de materiais.
+* **Iscas não-consumíveis (duráveis):** uso infinito, mas têm **durabilidade** — ao zerar entram em **modo quebrado** (penalidade nos bônus), com **auto-reparo opcional** caro, igual ao equipamento.
+* **Iscas de boss:** consumidas (1 carga) ao iniciar a Batalha de Boss.
+
+### 7.5. Progressão (XP e Skill Tree)
+* Pescar concede **XP** (inclusive no progresso offline). Subir de **nível** concede **pontos de Skill Tree**.
+* A Skill Tree aprimora atributos, melhora o Pet, reduz desgaste e multiplica bônus do Aquário.
+
+### 7.6. Oferenda no Aquário
+Registrar um troféu recalcula os buffs globais (`CalculateTotalStats`) e guarda o **melhor por espécie** (por faixa de qualidade).
+
+---
+
+## 8. Mundos, Localizações e Clima (Decisões Travadas)
+
+### 8.1. Estrutura
+* O conteúdo é organizado em **Mundos**, e cada Mundo contém **X Localizações**.
+* Cada **Localização** tem seu próprio **nível**, **tabela de spawn**, **materiais** e **ciclo de clima**.
+
+### 8.2. Progressão (gated por Act Boss)
+* A progressão entre Mundos é **linear**: para liberar o próximo Mundo, é preciso **derrotar o Act Boss** do Mundo atual.
+* O Act Boss é invocado com a **isca alquímica** correspondente e pode ser **pescado em qualquer Localização** daquele Mundo.
+
+### 8.3. Clima Determinístico por Localização
+* O clima é uma **função pura do tempo** por Localização: `clima(localização, t) = hash(seedGlobal, localização, slot)`.
+* É **previsível e compartilhado** (todos na Localização veem o mesmo) e **reconstrutível** em qualquer instante — o motor de pesca lê o clima sem armazenar histórico.
+* **Tempestade:** aumenta a força de fuga dos peixes, eleva a chance de Lendários e viabiliza o encontro com o Act Boss.
+
+### 8.4. Farm Retroativo
+* O jogador **pode voltar** a Localizações/Mundos anteriores.
+* **Ouro e XP** de zonas muito abaixo do seu nível são **reduzidos** (anti-trivialização); **materiais e troféus mantêm o valor** — preservando o farm necessário para crafting e alquimia.
+
+### 8.5. Baseline do Modo Desligado
+A média de Ouro/XP por hora do **jogo desligado** (seção 6.1) é derivada da **melhor Localização já alcançada** pelo jogador.
