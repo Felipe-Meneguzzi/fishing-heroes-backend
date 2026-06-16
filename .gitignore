@@ -1,0 +1,11 @@
+# binários
+/bin/
+*.exe
+/tmp/
+
+# ambiente
+.env
+
+# go
+*.test
+*.out
