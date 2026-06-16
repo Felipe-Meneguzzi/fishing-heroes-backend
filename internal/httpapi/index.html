@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fishing Heroes — Test Client</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+         background: #0e1116; color: #d6deeb; font-size: 13px; }
+  header { padding: 10px 16px; background: #161b22; border-bottom: 1px solid #2b3340;
+           display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: sticky; top: 0; z-index: 5; }
+  h1 { font-size: 15px; margin: 0; color: #7fdbca; font-weight: 600; }
+  h2 { font-size: 11px; margin: 0; padding: 8px 12px; color: #8a98ad;
+       border-bottom: 1px solid #2b3340; text-transform: uppercase; letter-spacing: .5px; }
+  #status { font-size: 12px; margin-left: auto; max-width: 45%; text-align: right; }
+  button { background: #21283180; color: #d6deeb; border: 1px solid #2b3340; border-radius: 6px;
+           padding: 6px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+  button:hover { background: #2b3340; border-color: #3b4756; }
+  button.primary { border-color: #2d6; color: #7fdbca; }
+  button.danger { border-color: #b3506b; color: #ff869a; }
+  button.on { background: #1d3b2a; border-color: #2d6; color: #b8f5d0; }
+  input, select { background: #0e1116; color: #d6deeb; border: 1px solid #2b3340; border-radius: 6px;
+                  padding: 6px 8px; font: inherit; font-size: 12px; }
+  main { display: grid; grid-template-columns: 320px 1fr 1fr; gap: 12px; padding: 12px; align-items: start; }
+  section { background: #11161d; border: 1px solid #2b3340; border-radius: 8px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .pad { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .span2 { grid-column: 2 / -1; } .span3 { grid-column: 1 / -1; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td, th { text-align: left; padding: 3px 12px; border-bottom: 1px solid #1b222c; }
+  th { color: #8a98ad; font-weight: 600; }
+  .num { color: #f78c6c; } .key { color: #c792ea; }
+  .big { font-size: 22px; color: #7fdbca; }
+  .pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; border: 1px solid #2b3340; }
+  .common{color:#cbd5e1} .rare{color:#82aaff} .epic{color:#c792ea} .legendary{color:#ecc48d} .perfect{color:#7fdbca}
+  .muted { color: #8a98ad; } .good { color: #b8f5d0; } .bad { color: #ff869a; }
+  .dev { border-top: 1px dashed #3b4756; margin-top: 6px; padding-top: 8px; }
+  .dev h3 { font-size: 10px; color: #b3506b; margin: 0 0 4px; letter-spacing: .5px; }
+  pre { margin: 0; padding: 12px; font-size: 12px; line-height: 1.4; overflow: auto; white-space: pre-wrap; max-height: 36vh; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
+  #feed { padding: 8px 12px; font-size: 12px; line-height: 1.55; overflow: auto; max-height: 34vh; }
+  .ev { white-space: pre-wrap; } .catch { color: #b8f5d0; } .escape { color: #6b7685; }
+  .trophyline { color: #ecc48d; } .runeline { color: #c792ea; } .matline { color: #82aaff; }
+  .live-dot { width: 9px; height: 9px; border-radius: 50%; background: #2d6; display: inline-block; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } .span2,.span3 { grid-column: auto; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎣 Fishing Heroes</h1>
+  <span class="muted">jogador: <b id="pid">nenhum</b></span>
+  <button onclick="forget()">trocar jogador</button>
+  <span id="status" class="muted">conectando…</span>
+</header>
+
+<main>
+  <!-- Coluna 1: jogador + pesca -->
+  <section>
+    <h2>Jogador</h2>
+    <div class="pad">
+      <div id="noPlayer">
+        <div class="row"><input id="name" placeholder="nome" style="flex:1" value="Pescador"></div>
+        <div class="row" style="margin-top:8px"><select id="class" style="flex:1"></select></div>
+        <div class="row" style="margin-top:8px"><button class="primary" style="flex:1" onclick="createPlayer()">criar jogador + kit inicial</button></div>
+        <div class="row" style="margin-top:12px"><input id="loadId" placeholder="ou cole um ID existente" style="flex:1"><button onclick="loadById()">carregar</button></div>
+      </div>
+      <div id="hasPlayer" style="display:none">
+        <div class="big" id="pName">—</div>
+        <div class="muted" id="pClass">—</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="span2">
+    <h2>Expedição de Pesca</h2>
+    <div class="pad">
+      <!-- entrar -->
+      <div id="enterBox" class="row">
+        <label>local</label>
+        <select id="loc"></select>
+        <label class="muted"><input type="checkbox" id="autorepair"> auto-reparo (gasta ouro)</label>
+        <button class="primary" onclick="enter()">🎣 Entrar e pescar</button>
+        <span class="muted">o personagem pesca sozinho em tempo real (Idle).</span>
+      </div>
+      <!-- pescando -->
+      <div id="fishingBox" style="display:none">
+        <div class="row">
+          <span class="live-dot"></span>
+          <b id="sessLoc">—</b> · <span id="sessWeather">—</span> · <span class="muted">tempo</span> <b id="sessTime">0s</b>
+          <button id="pauseBtn" class="on" onclick="togglePause()">⏸ pausar</button>
+          <button class="danger" onclick="leave()">🚪 sair do local</button>
+        </div>
+        <div class="row" style="gap:18px">
+          <span>durab. <b id="sessDur" class="num">—</b></span>
+          <span>isca <b id="sessBait">—</b></span>
+          <span>mochila <b id="sessBag" class="num">—</b></span>
+        </div>
+        <div class="dev">
+          <h3>⚙ DEV · fast-forward (simula tempo sem esperar)</h3>
+          <div class="row">
+            <button onclick="ff(600)">+10 min</button>
+            <button onclick="ff(3600)">+1 h</button>
+            <button onclick="ff(14400)">+4 h</button>
+            <button onclick="ff(28800)">+8 h</button>
+            <span class="muted">aplica no relógio da sessão atual.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Progressão</h2>
+    <div class="pad grid2" id="prog"></div>
+  </section>
+
+  <section>
+    <h2>Build / Atributos</h2>
+    <div class="pad" id="build"></div>
+  </section>
+
+  <section>
+    <h2>Equipamento</h2>
+    <div id="equip"></div>
+  </section>
+
+  <section>
+    <h2>Inventário</h2>
+    <div class="pad" id="inv"></div>
+  </section>
+
+  <section class="span2">
+    <h2><span class="row" style="justify-content:space-between"><span>Feed ao vivo</span><button onclick="document.getElementById('feed').innerHTML=''">limpar</button></span></h2>
+    <div id="feed" class="muted">— entre num local para começar a pescar —</div>
+  </section>
+
+  <section class="span2">
+    <h2>Troféus (peso por curva de Gauss · faixas por % do máximo)</h2>
+    <div id="trophies"></div>
+  </section>
+
+  <section class="span3">
+    <h2>Catálogo (templates carregados do banco)</h2>
+    <pre id="catalog"></pre>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let TEMPLATES = null, WORLDS = null, PID = localStorage.getItem("fh_player") || "";
+let live = false, paused = false, timer = null;
+const TICK_MS = 2500;
+
+function setStatus(msg, cls) { const s = $("status"); s.textContent = msg; s.className = cls || "muted"; }
+
+async function jget(p) { const r = await fetch(p); if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || r.status); return r.json(); }
+async function jpost(p, body) {
+  const r = await fetch(p, { method: "POST", headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || r.status);
+  return r.json();
+}
+
+async function boot() {
+  try {
+    TEMPLATES = await jget("/api/templates");
+    WORLDS = await jget("/api/worlds");
+    fillClasses(); fillLocations(); fillCatalog();
+    setStatus("conectado");
+    if (PID) { await reloadPlayer(); await syncSession(); } else showNoPlayer();
+  } catch (e) { setStatus("erro: " + e.message, "bad"); }
+}
+
+function fillClasses() {
+  const sel = $("class"); sel.innerHTML = "";
+  Object.values(TEMPLATES.classes).forEach(c => { const o = document.createElement("option"); o.value = c.ID; o.textContent = `${c.Name} (${c.ID})`; sel.appendChild(o); });
+}
+function fillLocations() {
+  const sel = $("loc"); sel.innerHTML = "";
+  (WORLDS || []).forEach(w => (w.Locations || []).forEach(l => { const o = document.createElement("option"); o.value = l.ID; o.textContent = `${l.ID} ${l.Name} · nível ${l.Level}`; sel.appendChild(o); }));
+}
+function fillCatalog() {
+  const fish = Object.values(TEMPLATES.fish).map(f => `  ${f.ID.padEnd(13)} ${f.Name.padEnd(13)} ${f.Category.padEnd(9)} força ${String(f.Force).padStart(3)} | xp ${f.XP} | ${f.MaxWeight>0?`tam ${f.MinWeight}-${f.MaxWeight}kg`:`mat ${f.MaterialID||f.RuneID||"-"}`}`).join("\n");
+  const eq = Object.values(TEMPLATES.equipment).map(e => `  ${e.ID.padEnd(13)} ${e.Name.padEnd(18)} ${e.Type}`).join("\n");
+  const baits = Object.values(TEMPLATES.baits).map(b => `  ${b.ID.padEnd(13)} ${b.Name.padEnd(18)} ${b.Kind}`).join("\n");
+  const runes = Object.values(TEMPLATES.runes).map(r => `  ${r.ID.padEnd(13)} ${r.Name}`).join("\n");
+  const skills = Object.values(TEMPLATES.skills).map(s => `  ${s.id.padEnd(11)} ${s.name.padEnd(20)} [${s.branch}] x${s.maxRank}`).join("\n");
+  $("catalog").textContent = `PEIXES\n${fish}\n\nEQUIPAMENTOS\n${eq}\n\nISCAS\n${baits}\n\nRUNAS\n${runes}\n\nSKILL TREE\n${skills}`;
+}
+
+function showNoPlayer() { $("noPlayer").style.display = ""; $("hasPlayer").style.display = "none"; $("pid").textContent = "nenhum"; }
+async function createPlayer() {
+  try { const p = await jpost("/api/players", { name: $("name").value || "Pescador", class: $("class").value });
+    PID = p.ID; localStorage.setItem("fh_player", PID); renderPlayer(p); await syncSession(); setStatus("jogador criado"); }
+  catch (e) { setStatus("erro ao criar: " + e.message, "bad"); }
+}
+async function loadById() { const id = $("loadId").value.trim(); if (!id) return; PID = id; localStorage.setItem("fh_player", id); await reloadPlayer(); await syncSession(); }
+function forget() { stopLoop(); localStorage.removeItem("fh_player"); PID = ""; showNoPlayer(); showEnter(); setStatus("—"); }
+
+// ---- sessão / loop de pesca ao vivo ----
+async function syncSession() {
+  const v = await jget(`/api/players/${PID}/session`);
+  if (v.active) { startLoop(v); } else { showEnter(); }
+}
+async function enter() {
+  const ar = $("autorepair").checked;
+  try { const v = await jpost(`/api/players/${PID}/session/start?location=${$("loc").value}&autorepair=${ar}`); startLoop(v); setStatus("entrou em " + v.locationName); }
+  catch (e) { setStatus("erro: " + e.message, "bad"); }
+}
+async function leave() {
+  stopLoop();
+  try { await jpost(`/api/players/${PID}/session/stop`); } catch (e) {}
+  showEnter(); await reloadPlayer(); setStatus("saiu do local");
+}
+function showEnter() { $("enterBox").style.display = ""; $("fishingBox").style.display = "none"; }
+function showFishing() { $("enterBox").style.display = "none"; $("fishingBox").style.display = ""; }
+
+function startLoop(sessionView) {
+  live = true; paused = false; showFishing(); renderSession(sessionView);
+  $("pauseBtn").textContent = "⏸ pausar"; $("pauseBtn").classList.add("on");
+  clearInterval(timer); timer = setInterval(tick, TICK_MS);
+  tick(); // primeiro tick imediato
+}
+function stopLoop() { live = false; clearInterval(timer); timer = null; }
+function togglePause() {
+  paused = !paused;
+  $("pauseBtn").textContent = paused ? "▶ retomar" : "⏸ pausar";
+  $("pauseBtn").classList.toggle("on", !paused);
+  setStatus(paused ? "pausado (tempo continua contando offline)" : "pescando ao vivo");
+}
+
+async function tick() { if (!live || paused) return; await resolve(0); }
+async function ff(seconds) { if (!live) return; await resolve(seconds); }
+
+let resolving = false;
+async function resolve(ff) {
+  if (resolving) return; resolving = true;
+  try {
+    const rv = await jpost(`/api/players/${PID}/session/resolve?ff=${ff}`);
+    renderSession(rv.session);
+    renderSummary(rv.player);
+    appendEvents(rv.events);
+    if (ff > 0) setStatus(`fast-forward +${ff/3600}h: +${rv.result.Gold} ouro, +${rv.result.XP} xp, ${(rv.result.Trophies||[]).length} troféus`);
+    else if (!paused) setStatus("pescando ao vivo");
+    await reloadPlayer(); // mantém inventário/troféus/build vivos
+  } catch (e) { setStatus("erro no tick: " + e.message, "bad"); }
+  finally { resolving = false; }
+}
+
+function renderSession(v) {
+  $("sessLoc").textContent = `${v.locationId} ${v.locationName}`;
+  $("sessWeather").innerHTML = v.weather === "storm" ? "⛈️ tempestade" : "☀️ tempo limpo";
+  $("sessTime").textContent = fmtDur(v.elapsedSec);
+  $("sessDur").innerHTML = `${v.durability.toFixed(0)}/${v.maxDurability.toFixed(0)}` + (v.broken ? ` <span class="bad">QUEBRADO</span>` : "");
+  $("sessBait").innerHTML = v.baitBasic ? `<span class="bad">básica</span>` : `${v.baitId} ${v.baitKind === "consumable" ? "(" + v.baitCharges + " cargas)" : ""}`;
+  $("sessBag").textContent = `${v.backpackCount}/${v.backpackCap}`;
+}
+function renderSummary(p) {
+  $("prog").innerHTML = kv({ "ouro": p.gold, "nível": p.level, "xp": p.xp, "pontos de skill": p.skillPoints });
+}
+
+function appendEvents(events) {
+  if (!events || !events.length) return;
+  const feed = $("feed");
+  if (feed.classList.contains("muted")) { feed.classList.remove("muted"); feed.innerHTML = ""; }
+  events.forEach(ev => {
+    const div = document.createElement("div"); div.className = "ev";
+    div.innerHTML = evLine(ev); feed.prepend(div);
+  });
+  while (feed.childNodes.length > 300) feed.removeChild(feed.lastChild);
+}
+function evLine(ev) {
+  const t = `[${fmtDur(ev.atSec)}]`;
+  if (ev.kind !== "catch") return `<span class="escape">${t} ✗ escapou ${ev.fish}</span>`;
+  if (ev.trophy) return `<span class="trophyline">${t} 🏆 ${ev.fish} — ${ev.trophy.quality} ${ev.trophy.weight.toFixed(2)}kg</span>`;
+  if (ev.material) return `<span class="matline">${t} 🐟 ${ev.fish} → material ${ev.material}</span>`;
+  if (ev.gold) return `<span class="catch">${t} 🐟 ${ev.fish} → +${ev.gold} ouro</span>`;
+  return `<span class="runeline">${t} ✨ ${ev.fish} → runa</span>`;
+}
+
+// ---- estado completo do jogador ----
+async function reloadPlayer() { if (!PID) return; try { renderPlayer(await jget("/api/players/" + PID)); } catch (e) {} }
+function renderPlayer(p) {
+  $("noPlayer").style.display = "none"; $("hasPlayer").style.display = "";
+  $("pid").textContent = p.ID; $("pName").textContent = p.Name; $("pClass").textContent = `classe: ${p.Class}`;
+  renderSummary({ gold: p.Gold, level: p.Level, xp: p.XP, skillPoints: p.SkillPoints });
+
+  const eq = [p.EquippedRod, p.EquippedReel, p.EquippedLine].filter(Boolean);
+  const total = sumStats(p.BaseStats, eq);
+  $("build").innerHTML = `<table><tr><th>atributo</th><th>base</th><th>+equip</th></tr>` +
+    STATKEYS.map(k => `<tr><td>${k}</td><td class="num">${fmt(p.BaseStats[k])}</td><td class="num good">${fmt(total[k])}</td></tr>`).join("") +
+    `</table><div class="muted" style="padding:8px 12px">multiplicadores de classe/skill são aplicados pelo servidor ao pescar.</div>`;
+
+  $("equip").innerHTML = eq.length ? `<table><tr><th>slot</th><th>item</th><th>durab.</th><th>bônus</th></tr>` +
+    eq.map(e => `<tr><td>${e.Type}</td><td>${e.TemplateID}</td><td>${e.Durability.toFixed(0)}/${e.MaxDurability.toFixed(0)}</td><td class="muted">${statSummary(e.Bonus)}</td></tr>`).join("") + `</table>`
+    : `<div class="pad muted">sem equipamento</div>`;
+
+  const t2 = (o) => Object.entries(o || {}).map(([k,v]) => `<tr><td class="key">${k}</td><td class="num">${v}</td></tr>`).join("");
+  $("inv").innerHTML =
+    `<b>materiais</b><table>${t2(p.Materials) || '<tr><td class="muted">—</td></tr>'}</table>` +
+    `<b style="margin-top:8px;display:block">runas</b><table>${t2(p.Runes) || '<tr><td class="muted">—</td></tr>'}</table>` +
+    `<b style="margin-top:8px;display:block">skill tree</b><table>${Object.entries(p.SkillTree||{}).map(([k,v])=>`<tr><td class="key">${k}</td><td class="num">rank ${v}</td></tr>`).join("") || '<tr><td class="muted">— sem pontos investidos —</td></tr>'}</table>`;
+
+  renderTrophies(p.Trophies || []);
+}
+function renderTrophies(tr) {
+  const order = ["perfect","legendary","epic","rare","common"]; const byQ = {}; order.forEach(q => byQ[q]=0);
+  tr.forEach(t => byQ[t.quality] = (byQ[t.quality]||0)+1);
+  const counts = order.filter(q => byQ[q]).map(q => `<span class="pill ${q}">${q} ×${byQ[q]}</span>`).join(" ") || `<span class="muted">nenhum troféu ainda</span>`;
+  const recent = tr.slice(0, 25).map(t => `<tr><td class="${t.quality}">${t.quality}</td><td>${t.speciesId}</td><td class="num">${t.weight.toFixed(2)} kg</td><td class="muted">${t.caughtLocationId||""}</td></tr>`).join("");
+  $("trophies").innerHTML = `<div class="pad">${counts}</div>` + (recent ? `<table><tr><th>faixa</th><th>espécie</th><th>peso</th><th>local</th></tr>${recent}</table>` : "");
+}
+
+// ---- helpers ----
+const STATKEYS = ["FishingPower","ReelForce","LineTension","RodHeight","BaitSpeed","DoubleCatchChance","LuckChance","LuckPower","EscapeReduction"];
+function sumStats(base, eqs) { const t = Object.assign({}, base); eqs.forEach(e => STATKEYS.forEach(k => t[k] = (t[k]||0) + (e.Bonus?.[k]||0))); return t; }
+function statSummary(s) { return STATKEYS.filter(k => s?.[k]).map(k => `${k} +${fmt(s[k])}`).join(", ") || "—"; }
+function kv(o) { return Object.entries(o).map(([k,v]) => `<div class="muted">${k}</div><div class="num">${v}</div>`).join(""); }
+function fmt(n) { n = n || 0; return Number.isInteger(n) ? n : n.toFixed(2); }
+function fmtDur(s) { s = Math.floor(s||0); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60; return (h?`${h}h`:"") + (h||m?`${String(m).padStart(2,"0")}m`:"") + `${String(x).padStart(2,"0")}s`; }
+
+window.addEventListener("beforeunload", stopLoop);
+boot();
+</script>
+</body>
+</html>
