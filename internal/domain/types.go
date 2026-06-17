@@ -144,6 +144,7 @@ type BuildSnapshot struct {
 
 // TrophyInstance — troféu individual capturado (peso/qualidade sorteados).
 type TrophyInstance struct {
+	ID               string      `json:"id,omitempty"` // id da instância (vazio em capturas recém-resolvidas)
 	SpeciesID        string      `json:"speciesId"`
 	Weight           float64     `json:"weight"`           // peso sorteado na captura
 	Quality          QualityTier `json:"quality"`          // faixa que escala o bônus do Aquário

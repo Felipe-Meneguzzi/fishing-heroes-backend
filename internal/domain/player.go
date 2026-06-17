@@ -47,10 +47,11 @@ type Player struct {
 	SkillTree   map[string]int // nodeID -> rank investido
 
 	// Build atual
-	EquippedRod  *EquipmentInstance
-	EquippedReel *EquipmentInstance
-	EquippedLine *EquipmentInstance
-	ActiveBaitID string
+	EquippedRod    *EquipmentInstance
+	EquippedReel   *EquipmentInstance
+	EquippedLine   *EquipmentInstance
+	StashEquipment []*EquipmentInstance // equipamentos no stash (não equipados, fora do mercado)
+	ActiveBaitID   string
 
 	// Inventário (stash)
 	Materials map[string]int             // contagens fungíveis

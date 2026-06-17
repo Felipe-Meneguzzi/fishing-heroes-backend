@@ -49,6 +49,9 @@ type BalanceConfig struct {
 
 	// XP
 	XPPerLevel int64 // XP por nível (curva linear simples no protótipo)
+
+	// Modo desligado (app fechado): recompensa de catch-up por fórmula fechada.
+	OfflineReductionPct float64 // fração do rendimento Idle no offline (0.5 = 50%)
 }
 
 // DefaultConfig devolve valores plausíveis para o protótipo rodar de imediato.
@@ -88,5 +91,7 @@ func DefaultConfig() BalanceConfig {
 		BrokenPowerMult: 0.40,
 
 		XPPerLevel: 1000,
+
+		OfflineReductionPct: 0.5,
 	}
 }

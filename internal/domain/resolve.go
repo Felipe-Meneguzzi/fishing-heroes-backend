@@ -22,7 +22,7 @@ type ResolveResult struct {
 	Materials map[string]int
 	Trophies  []TrophyInstance
 
-	EquipmentDrops []string
+	EquipmentDrops []EquipmentDrop
 	RuneDrops      map[string]int
 
 	RepairsGoldSpent int64
@@ -32,6 +32,13 @@ type ResolveResult struct {
 
 func newResult() ResolveResult {
 	return ResolveResult{Materials: map[string]int{}, RuneDrops: map[string]int{}}
+}
+
+// EquipmentDrop — drop de equipamento. RollSeed deriva os stats (server-seeded)
+// no momento da persistência, mantendo o resultado determinístico a partir da seed.
+type EquipmentDrop struct {
+	TemplateID string `json:"templateId"`
+	RollSeed   uint64 `json:"-"`
 }
 
 // GameEvent — um evento de pesca resolvido, para streaming/animação no cliente
@@ -259,7 +266,8 @@ func (e *Engine) resolve(s *Session, untilElapsed float64, emit func(GameEvent))
 
 				// Drops raros.
 				if len(cfg.EquipDropTable) > 0 && r.Float64() < cfg.EquipDropChance {
-					res.EquipmentDrops = append(res.EquipmentDrops, cfg.EquipDropTable[r.Intn(len(cfg.EquipDropTable))])
+					tmpl := cfg.EquipDropTable[r.Intn(len(cfg.EquipDropTable))]
+					res.EquipmentDrops = append(res.EquipmentDrops, EquipmentDrop{TemplateID: tmpl, RollSeed: r.nextU64()})
 				}
 				if len(cfg.RuneDropTable) > 0 && r.Float64() < cfg.RuneDropChance {
 					res.RuneDrops[cfg.RuneDropTable[r.Intn(len(cfg.RuneDropTable))]]++

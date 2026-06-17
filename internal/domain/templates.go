@@ -1,5 +1,7 @@
 package domain
 
+import "sort"
+
 // Templates de conteúdo (read-only, carregados na RAM no boot a partir do banco).
 // São apenas estruturas de dados — o domínio continua sem I/O.
 
@@ -30,12 +32,29 @@ type EquipmentTemplate struct {
 	MaxDurability float64
 }
 
-// BaseStats devolve o ponto médio das faixas — usado para o equipamento inicial
-// (o crafting com rolagem server-seeded é uma feature à parte).
+// BaseStats devolve o ponto médio das faixas — usado para o equipamento inicial.
 func (t EquipmentTemplate) BaseStats() Stats {
 	var s Stats
 	for k, rg := range t.RollRanges {
 		addToStat(&s, k, (rg[0]+rg[1])/2)
+	}
+	return s
+}
+
+// RollEquipmentStats rola os atributos dentro das faixas de forma determinística
+// (server-seeded) — crafting híbrido / drops. Chaves ordenadas p/ o resultado não
+// depender da ordem de iteração do mapa.
+func RollEquipmentStats(ranges map[string][2]float64, seed uint64) Stats {
+	keys := make([]string, 0, len(ranges))
+	for k := range ranges {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	r := &rng{state: mix64(seed)}
+	var s Stats
+	for _, k := range keys {
+		rg := ranges[k]
+		addToStat(&s, k, rg[0]+r.Float64()*(rg[1]-rg[0]))
 	}
 	return s
 }
