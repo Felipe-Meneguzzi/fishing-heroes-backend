@@ -4,38 +4,50 @@ package usecase
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
+	"fishingheroes/internal/auth"
 	"fishingheroes/internal/domain"
 	"fishingheroes/internal/repo"
 )
 
 // Service expõe os casos de uso do backend.
 type Service struct {
-	Pool      *pgxpool.Pool
-	Templates *repo.Templates
-	Engine    *domain.Engine
+	Pool         *pgxpool.Pool
+	Redis        *redis.Client
+	Templates    *repo.Templates
+	Engine       *domain.Engine
+	Tokens       *auth.TokenManager
+	Steam        auth.SteamVerifier
+	MarketFeeBps int
 }
 
-func New(pool *pgxpool.Pool, t *repo.Templates, e *domain.Engine) *Service {
-	return &Service{Pool: pool, Templates: t, Engine: e}
+// Deps — dependências do Service.
+type Deps struct {
+	Pool         *pgxpool.Pool
+	Redis        *redis.Client
+	Templates    *repo.Templates
+	Engine       *domain.Engine
+	Tokens       *auth.TokenManager
+	Steam        auth.SteamVerifier
+	MarketFeeBps int
 }
 
-// NewPlayer cria um jogador com o kit inicial.
-func (s *Service) NewPlayer(ctx context.Context, name, class string) (*domain.Player, error) {
-	if name == "" {
-		return nil, fmt.Errorf("nome obrigatório")
+func New(d Deps) *Service {
+	return &Service{
+		Pool: d.Pool, Redis: d.Redis, Templates: d.Templates, Engine: d.Engine,
+		Tokens: d.Tokens, Steam: d.Steam, MarketFeeBps: d.MarketFeeBps,
 	}
-	id, err := repo.CreatePlayer(ctx, s.Pool, s.Templates, name, class)
-	if err != nil {
-		return nil, err
-	}
-	return repo.GetPlayer(ctx, s.Pool, id)
 }
 
-// GetPlayer carrega o estado do jogador.
+// Ready verifica as dependências (Postgres/Redis) para a readiness probe.
+func (s *Service) Ready(ctx context.Context) error {
+	return repo.Ping(ctx, s.Pool, s.Redis)
+}
+
+// GetPlayer carrega o estado completo do jogador.
 func (s *Service) GetPlayer(ctx context.Context, id string) (*domain.Player, error) {
 	return repo.GetPlayer(ctx, s.Pool, id)
 }

@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"time"
@@ -12,9 +14,17 @@ import (
 
 // Fluxo de gameplay real (Idle, jogo aberto): o jogador ENTRA num local
 // (StartFishing congela a build e cria a fishing_session) e o personagem pesca
-// em TEMPO REAL. O client faz tick periódico (ResolveFishing), que resolve o
-// tempo decorrido desde o último claim e persiste os ganhos. `ffSeconds` é um
-// atalho de DEV (fast-forward) para simular horas sem esperar.
+// em TEMPO REAL.
+//
+// Leitura × escrita (escala p/ milhares de jogadores simultâneos):
+//   - Preview (GET): recalcula da seed o estado acumulado desde o último claim e
+//     devolve SEM tocar no banco. É o que o cliente consulta a cada tick — função
+//     pura, custo só de CPU (sub-ms), ZERO escrita no Postgres.
+//   - Claim (POST): persiste o acumulado numa transação e avança a âncora. Deve
+//     ser chamado com pouca frequência (periódico, ao sair, mochila cheia).
+//
+// Assim o Postgres só recebe escrita no claim — honra o "zero escrita por tick".
+// `ffSeconds` é fast-forward de DEV (cheat); o handler só o repassa em DevMode.
 
 // SessionView — estado da sessão para a UI.
 type SessionView struct {
@@ -93,47 +103,66 @@ func (s *Service) StartFishing(ctx context.Context, playerID, locationID string,
 	if err := repo.StartSession(ctx, s.Pool, row); err != nil {
 		return nil, err
 	}
+	// Popula o cache quente já no start (sem leitura extra: baseline vem de `p`).
+	repo.CacheSetSession(ctx, s.Redis, playerID, &repo.HotSession{Row: row, Baseline: repo.PlayerBaseline{
+		Gold: p.Gold, XP: p.XP, Level: p.Level, SkillPoints: p.SkillPoints,
+		HighestLocationID: p.HighestLocationID, Filters: p.Filters,
+	}})
 
 	sess, _ := s.sessionFromRow(&row)
 	v := s.sessionView(sess, loc, row.BaitID)
 	return &v, nil
 }
 
-// GetSessionView devolve a sessão ativa (ou Active=false se não houver).
-func (s *Service) GetSessionView(ctx context.Context, playerID string) (*SessionView, error) {
-	row, err := repo.GetSession(ctx, s.Pool, playerID)
-	if err == repo.ErrNoSession {
-		return &SessionView{Active: false}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	sess, loc := s.sessionFromRow(row)
-	v := s.sessionView(sess, loc, row.BaitID)
-	return &v, nil
+// PreviewFishing resolve o tempo decorrido e devolve o estado acumulado SEM
+// persistir (leitura pura). É o tick consultado pelo cliente para HUD/animação.
+func (s *Service) PreviewFishing(ctx context.Context, playerID string, ffSeconds float64) (*ResolveView, error) {
+	return s.runResolve(ctx, playerID, ffSeconds, false)
 }
 
-// StopFishing encerra a sessão (sair do local).
-func (s *Service) StopFishing(ctx context.Context, playerID string) error {
-	return repo.DeleteSession(ctx, s.Pool, playerID)
+// ClaimFishing resolve o tempo decorrido e PERSISTE numa transação, avançando a
+// âncora. Chamado de tempos em tempos (não a cada tick).
+func (s *Service) ClaimFishing(ctx context.Context, playerID string, ffSeconds float64) (*ResolveView, error) {
+	return s.runResolve(ctx, playerID, ffSeconds, true)
 }
 
-// ResolveFishing resolve o tempo decorrido desde o último claim (+ ffSeconds de
-// DEV) e persiste tudo. É o tick do loop de pesca ao vivo.
-func (s *Service) ResolveFishing(ctx context.Context, playerID string, ffSeconds float64) (*ResolveView, error) {
-	row, err := repo.GetSession(ctx, s.Pool, playerID)
+// StopFishing persiste o progresso pendente (claim) e encerra a sessão.
+func (s *Service) StopFishing(ctx context.Context, playerID string) (*ResolveView, error) {
+	rv, err := s.runResolve(ctx, playerID, 0, true)
+	if errors.Is(err, repo.ErrStaleClaim) {
+		// Outro claim concorrente já persistiu o progresso; só encerra.
+		if delErr := repo.DeleteSession(ctx, s.Pool, playerID); delErr != nil {
+			return nil, delErr
+		}
+		repo.CacheDelSession(ctx, s.Redis, playerID)
+		_ = repo.TouchLogout(ctx, s.Pool, playerID)
+		return &ResolveView{Session: SessionView{Active: false}}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	p, err := s.GetPlayer(ctx, playerID)
-	if err != nil {
+	if err := repo.DeleteSession(ctx, s.Pool, playerID); err != nil {
 		return nil, err
 	}
-	sess, loc := s.sessionFromRow(row)
-	sess.Filters = p.Filters
+	repo.CacheDelSession(ctx, s.Redis, playerID)
+	// Marca o logout (base do catch-up offline no próximo login).
+	_ = repo.TouchLogout(ctx, s.Pool, playerID)
+	rv.Session.Active = false
+	return rv, nil
+}
 
-	now := time.Now()
-	realDelta := now.Sub(row.LastTime).Seconds()
+// runResolve é o núcleo compartilhado de preview/claim: reconstrói a sessão,
+// resolve a janela (decorrido real + ffSeconds de DEV) e, se persist, grava.
+func (s *Service) runResolve(ctx context.Context, playerID string, ffSeconds float64, persist bool) (*ResolveView, error) {
+	hot, err := s.hotSession(ctx, playerID)
+	if err != nil {
+		return nil, err
+	}
+	row, base := &hot.Row, &hot.Baseline
+	sess, loc := s.sessionFromRow(row)
+	sess.Filters = base.Filters
+
+	realDelta := time.Since(row.LastTime).Seconds()
 	if realDelta < 0 {
 		realDelta = 0 // sessão "à frente" do relógio (após fast-forward de DEV)
 	}
@@ -145,43 +174,73 @@ func (s *Service) ResolveFishing(ctx context.Context, playerID string, ffSeconds
 	var events []domain.GameEvent
 	res := s.Engine.ResolveStream(sess, until, func(ev domain.GameEvent) { events = append(events, ev) })
 
-	// Progressão.
-	newXP := p.XP + res.XP
+	newXP := base.XP + res.XP
 	newLevel := domain.LevelForXP(newXP, s.Engine.Cfg)
-	addedPoints := domain.SkillPointsForLevel(newLevel) - domain.SkillPointsForLevel(p.Level)
+	addedPoints := domain.SkillPointsForLevel(newLevel) - domain.SkillPointsForLevel(base.Level)
 	if addedPoints < 0 {
 		addedPoints = 0
 	}
+	newSkillPoints := base.SkillPoints + addedPoints
+	newGold := base.Gold + res.Gold - res.RepairsGoldSpent
+	if newGold < 0 {
+		newGold = 0
+	}
 	newHighest := ""
-	if cur, ok := s.Templates.Locations[p.HighestLocationID]; !ok || loc.Level > cur.Level {
+	if cur, ok := s.Templates.Locations[base.HighestLocationID]; !ok || loc.Level > cur.Level {
 		newHighest = loc.ID
 	}
 
-	// Sessão avançada (start_time inalterado; last_time = start + elapsed sim).
-	charges, baitDur := baitAfter(sess.Bait)
-	after := *row
-	after.LastIndex = sess.LastIndex
-	after.LastTime = row.StartTime.Add(time.Duration(sess.ElapsedTotal * float64(time.Second)))
-	after.BackpackCount = sess.BackpackCount
-	after.Durability = sess.Durability
-	after.Broken = sess.Broken
-	after.BaitChargesLeft = charges
-	after.BaitDurability = baitDur
-
-	if err := repo.SaveResolve(ctx, s.Pool, playerID, res, newLevel, addedPoints, newHighest, after); err != nil {
-		return nil, err
+	if persist {
+		charges, baitDur := baitAfter(sess.Bait)
+		after := *row
+		after.LastIndex = sess.LastIndex
+		after.LastTime = row.StartTime.Add(time.Duration(sess.ElapsedTotal * float64(time.Second)))
+		after.BackpackCount = sess.BackpackCount
+		after.Durability = sess.Durability
+		after.Broken = sess.Broken
+		after.BaitChargesLeft = charges
+		after.BaitDurability = baitDur
+		equips := s.buildEquipInserts(res.EquipmentDrops)
+		if err := repo.SaveResolve(ctx, s.Pool, playerID, res, newLevel, addedPoints, newHighest, after, row.LastIndex, equips); err != nil {
+			if errors.Is(err, repo.ErrStaleClaim) {
+				repo.CacheDelSession(ctx, s.Redis, playerID) // cache obsoleto → repovoa do PG
+			}
+			return nil, err
+		}
+		// Atualiza o cache quente com a nova âncora + baseline (sem ler o PG).
+		hot.Row = after
+		hot.Baseline.Gold, hot.Baseline.XP, hot.Baseline.Level, hot.Baseline.SkillPoints = newGold, newXP, newLevel, newSkillPoints
+		if newHighest != "" {
+			hot.Baseline.HighestLocationID = newHighest
+		}
+		repo.CacheSetSession(ctx, s.Redis, playerID, hot)
 	}
 
-	gold := p.Gold + res.Gold - res.RepairsGoldSpent
-	if gold < 0 {
-		gold = 0
-	}
 	return &ResolveView{
 		Result:  res,
 		Events:  lastN(events, 200),
 		Session: s.sessionView(sess, loc, row.BaitID),
-		Player:  PlayerSummary{Gold: gold, XP: newXP, Level: newLevel, SkillPoints: p.SkillPoints + addedPoints},
+		Player:  PlayerSummary{Gold: newGold, XP: newXP, Level: newLevel, SkillPoints: newSkillPoints},
 	}, nil
+}
+
+// hotSession devolve o snapshot quente da sessão: tenta o Redis e, em miss, lê o
+// Postgres (âncora + baseline) e popula o cache. ErrNoSession se não houver sessão.
+func (s *Service) hotSession(ctx context.Context, playerID string) (*repo.HotSession, error) {
+	if h, ok := repo.CacheGetSession(ctx, s.Redis, playerID); ok {
+		return h, nil
+	}
+	row, err := repo.GetSession(ctx, s.Pool, playerID)
+	if err != nil {
+		return nil, err
+	}
+	base, err := repo.GetPlayerBaseline(ctx, s.Pool, playerID)
+	if err != nil {
+		return nil, err
+	}
+	h := &repo.HotSession{Row: *row, Baseline: *base}
+	repo.CacheSetSession(ctx, s.Redis, playerID, h)
+	return h, nil
 }
 
 // --- helpers ---
@@ -296,6 +355,25 @@ func baitAfter(b *domain.BaitState) (*int, *float64) {
 		return nil, &d
 	}
 	return nil, nil
+}
+
+// buildEquipInserts rola os stats (server-seeded) de cada drop de equipamento.
+func (s *Service) buildEquipInserts(drops []domain.EquipmentDrop) []repo.EquipmentInsert {
+	if len(drops) == 0 {
+		return nil
+	}
+	out := make([]repo.EquipmentInsert, 0, len(drops))
+	for _, d := range drops {
+		et, ok := s.Templates.Equipment[d.TemplateID]
+		if !ok {
+			continue
+		}
+		bonus, _ := json.Marshal(domain.RollEquipmentStats(et.RollRanges, d.RollSeed))
+		out = append(out, repo.EquipmentInsert{
+			TemplateID: et.ID, Type: et.Type, Bonus: bonus, MaxDurability: et.MaxDurability,
+		})
+	}
+	return out
 }
 
 func lastN(ev []domain.GameEvent, n int) []domain.GameEvent {
