@@ -442,8 +442,8 @@ type FilterRule struct {
 
 ### 7.2. Estado Quente / Efêmero (Redis)
 * `Loc:{id}:Weather` — publicação do clima atual por Localização, com TTL (apenas cache pra UI; o clima é determinístico).
-* Cache opcional de sessões em foreground.
-* Pode ser perdido sem perda de progresso (Postgres é a verdade).
+* `sess:{playerId}` — **cache quente da sessão** (âncora + baseline ouro/XP), TTL ~2h. O caminho QUENTE (tick do WebSocket / preview) lê daqui em velocidade de memória, sem bater no Postgres a cada ~1,5s; o claim atualiza Redis + Postgres. Implementado em `internal/repo/cache.go`.
+* Pode ser perdido sem perda de progresso (Postgres é a verdade): em miss, repovoa do Postgres.
 
 ### 7.3. Templates (RAM)
 Peixes, Mundos/Localizações, tabelas de spawn, runas e receitas são read-only e carregados em memória no boot.
@@ -771,7 +771,7 @@ mordida, spawn, captura/escape, duração da luta, desgaste de durabilidade, que
 * ❌ escrever no Postgres por tick/evento — só no `claim` (ver §7.4/§7.6).
 * ❌ confiar em payload do cliente sem revalidar no servidor.
 
-> Referência no código: `internal/domain/resolve.go` (lazy puro), `ResolveStream`/`GameEvent` (emissão p/ WS), e `cmd/devserver` (a separação HTTP-lazy × WS-cosmético na prática).
+> Referência no código: `internal/domain/resolve.go` (lazy puro), `ResolveStream`/`GameEvent` (emissão p/ WS), e a separação **leitura × escrita** em `internal/usecase/fishing.go` — `PreviewFishing` (GET, recalcula da seed, **zero escrita**) × `ClaimFishing` (POST, persiste no claim). O servidor só escreve no claim.
 
 ### 9.2. Camadas (Clean Architecture) — onde cada coisa mora
 
@@ -839,7 +839,7 @@ Os números vivem em **dois lugares**, e saber qual usar é a regra central:
 
 Diretrizes:
 * **Curvas:** derive `gold_per_hour`/`xp_per_hour` de uma Localização do **rendimento esperado do Idle** ali; o modo desligado é uma fração disso (`× (1 − X%)`), mantendo os dois acoplados.
-* **Bancada de tuning:** rode `go run ./cmd/resolvedemo` e `go run ./cmd/devserver` (fast-forward) com a config atual para **medir** ouro/XP por hora, taxa de captura e frequência de quebra **antes** de cravar números.
+* **Bancada de tuning:** com `DEV_MODE=true`, use o client de teste em `/` (fast-forward via `?ff=`) ou exercite o motor por testes/benchmarks em `internal/domain` para **medir** ouro/XP por hora, taxa de captura e frequência de quebra **antes** de cravar números.
 * **Auditoria:** como tudo é server-seeded e determinístico, qualquer sessão suspeita é reproduzível a partir de `(seed, build_snapshot, last_index)`.
 
 ### 9.7. Estrutura da DB (resumo operacional)
