@@ -3,325 +3,393 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fishing Heroes — Test Client</title>
+<title>Fishing Heroes</title>
 <style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
-         background: #0e1116; color: #d6deeb; font-size: 13px; }
-  header { padding: 10px 16px; background: #161b22; border-bottom: 1px solid #2b3340;
-           display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: sticky; top: 0; z-index: 5; }
-  h1 { font-size: 15px; margin: 0; color: #7fdbca; font-weight: 600; }
-  h2 { font-size: 11px; margin: 0; padding: 8px 12px; color: #8a98ad;
-       border-bottom: 1px solid #2b3340; text-transform: uppercase; letter-spacing: .5px; }
-  #status { font-size: 12px; margin-left: auto; max-width: 45%; text-align: right; }
-  button { background: #21283180; color: #d6deeb; border: 1px solid #2b3340; border-radius: 6px;
-           padding: 6px 10px; cursor: pointer; font: inherit; font-size: 12px; }
-  button:hover { background: #2b3340; border-color: #3b4756; }
-  button.primary { border-color: #2d6; color: #7fdbca; }
-  button.danger { border-color: #b3506b; color: #ff869a; }
-  button.on { background: #1d3b2a; border-color: #2d6; color: #b8f5d0; }
-  input, select { background: #0e1116; color: #d6deeb; border: 1px solid #2b3340; border-radius: 6px;
-                  padding: 6px 8px; font: inherit; font-size: 12px; }
-  main { display: grid; grid-template-columns: 320px 1fr 1fr; gap: 12px; padding: 12px; align-items: start; }
-  section { background: #11161d; border: 1px solid #2b3340; border-radius: 8px; }
-  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .pad { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-  .span2 { grid-column: 2 / -1; } .span3 { grid-column: 1 / -1; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  td, th { text-align: left; padding: 3px 12px; border-bottom: 1px solid #1b222c; }
-  th { color: #8a98ad; font-weight: 600; }
-  .num { color: #f78c6c; } .key { color: #c792ea; }
-  .big { font-size: 22px; color: #7fdbca; }
-  .pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; border: 1px solid #2b3340; }
-  .common{color:#cbd5e1} .rare{color:#82aaff} .epic{color:#c792ea} .legendary{color:#ecc48d} .perfect{color:#7fdbca}
-  .muted { color: #8a98ad; } .good { color: #b8f5d0; } .bad { color: #ff869a; }
-  .dev { border-top: 1px dashed #3b4756; margin-top: 6px; padding-top: 8px; }
-  .dev h3 { font-size: 10px; color: #b3506b; margin: 0 0 4px; letter-spacing: .5px; }
-  pre { margin: 0; padding: 12px; font-size: 12px; line-height: 1.4; overflow: auto; white-space: pre-wrap; max-height: 36vh; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
-  #feed { padding: 8px 12px; font-size: 12px; line-height: 1.55; overflow: auto; max-height: 34vh; }
-  .ev { white-space: pre-wrap; } .catch { color: #b8f5d0; } .escape { color: #6b7685; }
-  .trophyline { color: #ecc48d; } .runeline { color: #c792ea; } .matline { color: #82aaff; }
-  .live-dot { width: 9px; height: 9px; border-radius: 50%; background: #2d6; display: inline-block; animation: pulse 1.2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
-  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } .span2,.span3 { grid-column: auto; } }
+  :root {
+    --bg:#071018; --bg2:#0c1a26; --card:#0f2230; --card2:#132c3d; --line:#1d3a4d;
+    --ink:#dceaf2; --muted:#7fa0b3; --teal:#46d6c4; --gold:#f4c95d; --xp:#7aa2ff; --bad:#ff7a8a; --good:#7ff0a8;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,"Segoe UI",Roboto,sans-serif; color:var(--ink);
+         background:radial-gradient(1200px 700px at 50% -10%, #103043 0%, var(--bg) 60%); min-height:100vh; }
+  button { font:inherit; cursor:pointer; border-radius:10px; border:1px solid var(--line);
+           background:#16344a; color:var(--ink); padding:9px 14px; transition:.15s; }
+  button:hover { background:#1d425c; border-color:#2b5a78; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.primary { background:linear-gradient(180deg,#3ec8b8,#22a596); border:none; color:#03201d; font-weight:700; }
+  button.primary:hover { filter:brightness(1.08); }
+  button.ghost { background:transparent; }
+  input, select { font:inherit; background:#0a1822; color:var(--ink); border:1px solid var(--line);
+                  border-radius:10px; padding:10px 12px; outline:none; }
+  input:focus, select:focus { border-color:var(--teal); }
+  .muted { color:var(--muted); } .gold { color:var(--gold); } .good{color:var(--good);} .bad{color:var(--bad);}
+
+  /* ---------- LOGIN ---------- */
+  #login { position:fixed; inset:0; display:grid; place-items:center; padding:20px; }
+  .loginCard { width:min(440px,92vw); background:linear-gradient(180deg,var(--card2),var(--card));
+               border:1px solid var(--line); border-radius:20px; padding:30px; box-shadow:0 30px 80px #0009; }
+  .logo { font-size:30px; font-weight:800; letter-spacing:.5px; }
+  .logo .a{color:var(--teal)} .logo .b{color:var(--gold)}
+  .field { margin-top:16px; } .field label { font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
+  .classes { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .classCard { border:1px solid var(--line); border-radius:12px; padding:12px; cursor:pointer; background:#0a1822; transition:.15s; }
+  .classCard:hover { border-color:#2b5a78; }
+  .classCard.sel { border-color:var(--teal); background:#0d2a2c; box-shadow:0 0 0 1px var(--teal) inset; }
+  .classCard b { display:block; } .classCard small { color:var(--muted); font-size:11px; line-height:1.3; }
+
+  /* ---------- APP ---------- */
+  #app { display:none; max-width:1180px; margin:0 auto; padding:16px; }
+  header.bar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:12px 16px;
+               background:var(--card); border:1px solid var(--line); border-radius:16px; }
+  .persona { font-weight:700; font-size:16px; }
+  .lvl { background:#10384a; color:var(--teal); border-radius:999px; padding:3px 10px; font-size:12px; font-weight:700; }
+  .coin { color:var(--gold); font-weight:700; font-variant-numeric:tabular-nums; }
+  .xpwrap { flex:1; min-width:140px; max-width:260px; }
+  .xpbar { height:8px; background:#0a1822; border-radius:999px; overflow:hidden; border:1px solid var(--line); }
+  .xpfill { height:100%; background:linear-gradient(90deg,var(--xp),#a9c0ff); width:0%; transition:width .4s; }
+  .grid { display:grid; grid-template-columns:1.4fr 1fr; gap:16px; margin-top:16px; align-items:start; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+  .card h2 { margin:0; padding:12px 16px; font-size:12px; letter-spacing:.6px; text-transform:uppercase;
+             color:var(--muted); border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+  .pad { padding:16px; }
+  @media (max-width:900px){ .grid { grid-template-columns:1fr; } }
+
+  /* cena de pesca */
+  .scene { position:relative; height:150px; border-radius:12px; margin:0 16px 12px;
+           background:linear-gradient(180deg,#0a2230 0%, #0b2c3a 55%, #06202b 100%); overflow:hidden; border:1px solid var(--line); }
+  .scene .sky { position:absolute; inset:0; transition:background .8s; }
+  .scene.storm .sky { background:linear-gradient(180deg,#1a2230 0%, #122231 100%); }
+  .scene .sun { position:absolute; top:16px; right:24px; font-size:34px; transition:.4s; }
+  .scene .water { position:absolute; left:0; right:0; bottom:0; height:64px;
+                  background:repeating-linear-gradient(90deg,#0e3a4a,#0e3a4a 12px,#10465a 12px,#10465a 24px); opacity:.5; }
+  .scene .bob { position:absolute; left:50%; top:64px; transform:translateX(-50%); font-size:26px; animation:bob 2.4s ease-in-out infinite; }
+  @keyframes bob { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(7px)} }
+  .scene .catchpop { position:absolute; left:50%; top:30px; transform:translateX(-50%); font-size:30px; opacity:0; }
+  .scene .catchpop.show { animation:pop 1s ease-out; }
+  @keyframes pop { 0%{opacity:0; transform:translateX(-50%) translateY(20px) scale(.6)} 30%{opacity:1} 100%{opacity:0; transform:translateX(-50%) translateY(-26px) scale(1.1)} }
+
+  .hud { display:grid; grid-template-columns:repeat(2,1fr); gap:10px 18px; padding:0 16px 14px; }
+  .stat { font-size:13px; } .stat .k { color:var(--muted); font-size:11px; }
+  .bar { height:7px; background:#0a1822; border-radius:999px; overflow:hidden; border:1px solid var(--line); margin-top:4px; }
+  .bar > i { display:block; height:100%; transition:width .3s; }
+  .deltas { display:flex; gap:18px; padding:0 16px 14px; font-variant-numeric:tabular-nums; }
+  .delta b { font-size:20px; }
+
+  /* feed */
+  #feed { max-height:300px; overflow:auto; padding:6px 0; }
+  .ev { padding:8px 16px; border-bottom:1px solid #102230; display:flex; gap:10px; align-items:center; animation:slide .35s ease; }
+  @keyframes slide { from{opacity:0; transform:translateY(-6px)} to{opacity:1} }
+  .ev .ic { font-size:18px; width:24px; text-align:center; }
+  .ev .tx { flex:1; } .ev .tx small { color:var(--muted); }
+  .ev .amt { font-variant-numeric:tabular-nums; }
+  .ev.trophy { background:linear-gradient(90deg,#2a230b22,transparent); }
+  .ev.escape { opacity:.5; }
+  .q { font-weight:700; } .q.common{color:#cdd9e3} .q.rare{color:#7aa2ff} .q.epic{color:#c79bff} .q.legendary{color:var(--gold)} .q.perfect{color:var(--teal)}
+
+  .loc { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .pill { background:#0a1822; border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; }
+  .trophies { display:flex; flex-wrap:wrap; gap:8px; }
+  .tcard { background:#0a1822; border:1px solid var(--line); border-radius:10px; padding:8px 10px; font-size:12px; min-width:120px; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:3px 12px; font-size:13px; }
+  .kv .k { color:var(--muted); }
+  .dev { margin-top:10px; padding-top:10px; border-top:1px dashed #244; }
+  .dev small { color:#5b7; }
+
+  /* offline modal */
+  #offline { position:fixed; inset:0; background:#000a; display:none; place-items:center; z-index:50; }
+  .offcard { width:min(420px,92vw); background:linear-gradient(180deg,var(--card2),var(--card)); border:1px solid var(--teal);
+             border-radius:18px; padding:26px; text-align:center; box-shadow:0 0 60px #46d6c433; }
+  .offcard .big { font-size:40px; }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#16344a; border:1px solid var(--line);
+           padding:10px 16px; border-radius:10px; opacity:0; transition:.3s; pointer-events:none; }
+  .toast.show { opacity:1; }
 </style>
 </head>
 <body>
-<header>
-  <h1>🎣 Fishing Heroes</h1>
-  <span class="muted">jogador: <b id="pid">nenhum</b></span>
-  <button onclick="forget()">trocar jogador</button>
-  <span id="status" class="muted">conectando…</span>
-</header>
 
-<main>
-  <!-- Coluna 1: jogador + pesca -->
-  <section>
-    <h2>Jogador</h2>
-    <div class="pad">
-      <div id="noPlayer">
-        <div class="row"><input id="name" placeholder="nome" style="flex:1" value="Pescador"></div>
-        <div class="row" style="margin-top:8px"><select id="class" style="flex:1"></select></div>
-        <div class="row" style="margin-top:8px"><button class="primary" style="flex:1" onclick="createPlayer()">criar jogador + kit inicial</button></div>
-        <div class="row" style="margin-top:12px"><input id="loadId" placeholder="ou cole um ID existente" style="flex:1"><button onclick="loadById()">carregar</button></div>
-      </div>
-      <div id="hasPlayer" style="display:none">
-        <div class="big" id="pName">—</div>
-        <div class="muted" id="pClass">—</div>
-      </div>
+<!-- LOGIN -->
+<div id="login">
+  <div class="loginCard">
+    <div class="logo">🎣 <span class="a">Fishing</span> <span class="b">Heroes</span></div>
+    <div class="muted" style="margin-top:4px">RPG de pesca idle</div>
+    <div class="field">
+      <label>Seu nome de pescador</label>
+      <input id="name" placeholder="Pescador" style="width:100%">
     </div>
-  </section>
+    <div class="field">
+      <label>Classe (só vale ao criar o personagem)</label>
+      <div class="classes" id="classes"></div>
+    </div>
+    <button class="primary" style="width:100%; margin-top:20px; padding:12px" onclick="play()">Jogar ▸</button>
+    <div class="muted" style="font-size:11px; margin-top:12px; text-align:center">login de desenvolvimento (sem Steam)</div>
+  </div>
+</div>
 
-  <section class="span2">
-    <h2>Expedição de Pesca</h2>
-    <div class="pad">
-      <!-- entrar -->
-      <div id="enterBox" class="row">
-        <label>local</label>
-        <select id="loc"></select>
-        <label class="muted"><input type="checkbox" id="autorepair"> auto-reparo (gasta ouro)</label>
-        <button class="primary" onclick="enter()">🎣 Entrar e pescar</button>
-        <span class="muted">o personagem pesca sozinho em tempo real (Idle).</span>
+<!-- APP -->
+<div id="app">
+  <header class="bar">
+    <span class="persona" id="hPersona">—</span>
+    <span class="lvl" id="hLvl">nv 1</span>
+    <span class="coin" id="hGold">0 ⦿</span>
+    <div class="xpwrap"><div class="xpbar"><div class="xpfill" id="hXp"></div></div></div>
+    <button class="ghost" onclick="logout()">sair</button>
+  </header>
+
+  <div class="grid">
+    <!-- ESQUERDA: pesca -->
+    <div class="card">
+      <h2><span>Expedição</span><span id="hWeather" class="muted"></span></h2>
+
+      <!-- seleção de local -->
+      <div id="selectView" class="pad">
+        <div class="loc">
+          <span class="muted">onde pescar:</span>
+          <select id="loc"></select>
+          <label class="muted" style="font-size:12px"><input type="checkbox" id="autorepair"> auto-reparo</label>
+          <button class="primary" onclick="enter()">🎣 Pescar aqui</button>
+        </div>
+        <div class="muted" style="margin-top:10px; font-size:12px">o personagem pesca sozinho em tempo real — acompanhe ao vivo.</div>
       </div>
+
       <!-- pescando -->
-      <div id="fishingBox" style="display:none">
-        <div class="row">
-          <span class="live-dot"></span>
-          <b id="sessLoc">—</b> · <span id="sessWeather">—</span> · <span class="muted">tempo</span> <b id="sessTime">0s</b>
-          <button id="pauseBtn" class="on" onclick="togglePause()">⏸ pausar</button>
-          <button class="danger" onclick="leave()">🚪 sair do local</button>
+      <div id="fishView" style="display:none">
+        <div class="scene" id="scene">
+          <div class="sky"></div><div class="sun" id="sceneSun">☀️</div>
+          <div class="water"></div>
+          <div class="bob">🎣</div>
+          <div class="catchpop" id="catchpop"></div>
         </div>
-        <div class="row" style="gap:18px">
-          <span>durab. <b id="sessDur" class="num">—</b></span>
-          <span>isca <b id="sessBait">—</b></span>
-          <span>mochila <b id="sessBag" class="num">—</b></span>
+        <div class="deltas">
+          <div class="delta"><div class="muted" style="font-size:11px">OURO (sessão)</div><b class="gold" id="dGold">0</b></div>
+          <div class="delta"><div class="muted" style="font-size:11px">XP (sessão)</div><b style="color:var(--xp)" id="dXp">0</b></div>
+          <div class="delta"><div class="muted" style="font-size:11px">CAPTURAS</div><b id="dCatch">0</b></div>
+          <div class="delta"><div class="muted" style="font-size:11px">TROFÉUS</div><b class="gold" id="dTroph">0</b></div>
         </div>
-        <div class="dev">
-          <h3>⚙ DEV · fast-forward (simula tempo sem esperar)</h3>
-          <div class="row">
-            <button onclick="ff(600)">+10 min</button>
-            <button onclick="ff(3600)">+1 h</button>
-            <button onclick="ff(14400)">+4 h</button>
-            <button onclick="ff(28800)">+8 h</button>
-            <span class="muted">aplica no relógio da sessão atual.</span>
+        <div class="hud">
+          <div class="stat"><div class="k">durabilidade da vara</div><div class="bar"><i id="barDur" style="background:var(--good)"></i></div></div>
+          <div class="stat"><div class="k">isca</div><div class="bar"><i id="barBait" style="background:var(--teal)"></i></div><span id="baitTxt" class="muted" style="font-size:11px"></span></div>
+          <div class="stat"><div class="k">mochila</div><div class="bar"><i id="barBag" style="background:var(--xp)"></i></div></div>
+          <div class="stat"><div class="k">tempo de pesca</div><div id="elapsed">0s</div></div>
+        </div>
+        <div class="pad" style="padding-top:0">
+          <button class="ghost" onclick="leave()">⟵ voltar ao porto</button>
+          <span id="wsState" class="muted" style="font-size:12px; margin-left:8px">conectando…</span>
+          <div class="dev">
+            <small>⚙ DEV — simular tempo (fast-forward):</small>
+            <div style="margin-top:6px"><button onclick="ff(3600)">+1h</button> <button onclick="ff(28800)">+8h</button></div>
           </div>
         </div>
       </div>
     </div>
-  </section>
 
-  <section>
-    <h2>Progressão</h2>
-    <div class="pad grid2" id="prog"></div>
-  </section>
+    <!-- DIREITA: estado -->
+    <div>
+      <div class="card">
+        <h2>Feed ao vivo</h2>
+        <div id="feed"><div class="pad muted">entre num local para começar…</div></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2>Personagem</h2>
+        <div class="pad kv" id="charKv"></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2><span>Troféus</span><span id="trophCount" class="muted"></span></h2>
+        <div class="pad trophies" id="trophies"></div>
+      </div>
+    </div>
+  </div>
+</div>
 
-  <section>
-    <h2>Build / Atributos</h2>
-    <div class="pad" id="build"></div>
-  </section>
+<!-- OFFLINE -->
+<div id="offline"><div class="offcard">
+  <div class="big">🌙</div>
+  <h3 style="margin:6px 0">Enquanto você esteve fora…</h3>
+  <div class="muted" id="offHours"></div>
+  <div style="margin:16px 0; font-size:18px"><span class="gold" id="offGold">+0 ⦿</span> &nbsp; <span style="color:var(--xp)" id="offXp">+0 XP</span></div>
+  <button class="primary" onclick="document.getElementById('offline').style.display='none'">Coletar</button>
+</div></div>
 
-  <section>
-    <h2>Equipamento</h2>
-    <div id="equip"></div>
-  </section>
-
-  <section>
-    <h2>Inventário</h2>
-    <div class="pad" id="inv"></div>
-  </section>
-
-  <section class="span2">
-    <h2><span class="row" style="justify-content:space-between"><span>Feed ao vivo</span><button onclick="document.getElementById('feed').innerHTML=''">limpar</button></span></h2>
-    <div id="feed" class="muted">— entre num local para começar a pescar —</div>
-  </section>
-
-  <section class="span2">
-    <h2>Troféus (peso por curva de Gauss · faixas por % do máximo)</h2>
-    <div id="trophies"></div>
-  </section>
-
-  <section class="span3">
-    <h2>Catálogo (templates carregados do banco)</h2>
-    <pre id="catalog"></pre>
-  </section>
-</main>
+<div class="toast" id="toast"></div>
 
 <script>
-const $ = (id) => document.getElementById(id);
-let TEMPLATES = null, WORLDS = null, PID = localStorage.getItem("fh_player") || "";
-let live = false, paused = false, timer = null;
-const TICK_MS = 2500;
+const $ = id => document.getElementById(id);
+let TOKEN = localStorage.getItem('fh_token') || '';
+let TPL = null, WORLDS = null, selectedClass = 'bruiser', ws = null;
 
-function setStatus(msg, cls) { const s = $("status"); s.textContent = msg; s.className = cls || "muted"; }
+function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200); }
 
-async function jget(p) { const r = await fetch(p); if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || r.status); return r.json(); }
-async function jpost(p, body) {
-  const r = await fetch(p, { method: "POST", headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
-  if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || r.status);
-  return r.json();
+async function api(method, path, body) {
+  const h = {}; if (TOKEN) h['Authorization'] = 'Bearer '+TOKEN; if (body) h['Content-Type']='application/json';
+  const r = await fetch(path, { method, headers:h, body: body?JSON.stringify(body):undefined });
+  if (r.status === 401) { logout(); throw new Error('sessão expirada'); }
+  if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || ('HTTP '+r.status));
+  return r.status===204 ? null : r.json();
 }
 
+// ---------- boot ----------
 async function boot() {
-  try {
-    TEMPLATES = await jget("/api/templates");
-    WORLDS = await jget("/api/worlds");
-    fillClasses(); fillLocations(); fillCatalog();
-    setStatus("conectado");
-    if (PID) { await reloadPlayer(); await syncSession(); } else showNoPlayer();
-  } catch (e) { setStatus("erro: " + e.message, "bad"); }
-}
-
-function fillClasses() {
-  const sel = $("class"); sel.innerHTML = "";
-  Object.values(TEMPLATES.classes).forEach(c => { const o = document.createElement("option"); o.value = c.ID; o.textContent = `${c.Name} (${c.ID})`; sel.appendChild(o); });
-}
-function fillLocations() {
-  const sel = $("loc"); sel.innerHTML = "";
-  (WORLDS || []).forEach(w => (w.Locations || []).forEach(l => { const o = document.createElement("option"); o.value = l.ID; o.textContent = `${l.ID} ${l.Name} · nível ${l.Level}`; sel.appendChild(o); }));
-}
-function fillCatalog() {
-  const fish = Object.values(TEMPLATES.fish).map(f => `  ${f.ID.padEnd(13)} ${f.Name.padEnd(13)} ${f.Category.padEnd(9)} força ${String(f.Force).padStart(3)} | xp ${f.XP} | ${f.MaxWeight>0?`tam ${f.MinWeight}-${f.MaxWeight}kg`:`mat ${f.MaterialID||f.RuneID||"-"}`}`).join("\n");
-  const eq = Object.values(TEMPLATES.equipment).map(e => `  ${e.ID.padEnd(13)} ${e.Name.padEnd(18)} ${e.Type}`).join("\n");
-  const baits = Object.values(TEMPLATES.baits).map(b => `  ${b.ID.padEnd(13)} ${b.Name.padEnd(18)} ${b.Kind}`).join("\n");
-  const runes = Object.values(TEMPLATES.runes).map(r => `  ${r.ID.padEnd(13)} ${r.Name}`).join("\n");
-  const skills = Object.values(TEMPLATES.skills).map(s => `  ${s.id.padEnd(11)} ${s.name.padEnd(20)} [${s.branch}] x${s.maxRank}`).join("\n");
-  $("catalog").textContent = `PEIXES\n${fish}\n\nEQUIPAMENTOS\n${eq}\n\nISCAS\n${baits}\n\nRUNAS\n${runes}\n\nSKILL TREE\n${skills}`;
-}
-
-function showNoPlayer() { $("noPlayer").style.display = ""; $("hasPlayer").style.display = "none"; $("pid").textContent = "nenhum"; }
-async function createPlayer() {
-  try { const p = await jpost("/api/players", { name: $("name").value || "Pescador", class: $("class").value });
-    PID = p.ID; localStorage.setItem("fh_player", PID); renderPlayer(p); await syncSession(); setStatus("jogador criado"); }
-  catch (e) { setStatus("erro ao criar: " + e.message, "bad"); }
-}
-async function loadById() { const id = $("loadId").value.trim(); if (!id) return; PID = id; localStorage.setItem("fh_player", id); await reloadPlayer(); await syncSession(); }
-function forget() { stopLoop(); localStorage.removeItem("fh_player"); PID = ""; showNoPlayer(); showEnter(); setStatus("—"); }
-
-// ---- sessão / loop de pesca ao vivo ----
-async function syncSession() {
-  const v = await jget(`/api/players/${PID}/session`);
-  if (v.active) { startLoop(v); } else { showEnter(); }
-}
-async function enter() {
-  const ar = $("autorepair").checked;
-  try { const v = await jpost(`/api/players/${PID}/session/start?location=${$("loc").value}&autorepair=${ar}`); startLoop(v); setStatus("entrou em " + v.locationName); }
-  catch (e) { setStatus("erro: " + e.message, "bad"); }
-}
-async function leave() {
-  stopLoop();
-  try { await jpost(`/api/players/${PID}/session/stop`); } catch (e) {}
-  showEnter(); await reloadPlayer(); setStatus("saiu do local");
-}
-function showEnter() { $("enterBox").style.display = ""; $("fishingBox").style.display = "none"; }
-function showFishing() { $("enterBox").style.display = "none"; $("fishingBox").style.display = ""; }
-
-function startLoop(sessionView) {
-  live = true; paused = false; showFishing(); renderSession(sessionView);
-  $("pauseBtn").textContent = "⏸ pausar"; $("pauseBtn").classList.add("on");
-  clearInterval(timer); timer = setInterval(tick, TICK_MS);
-  tick(); // primeiro tick imediato
-}
-function stopLoop() { live = false; clearInterval(timer); timer = null; }
-function togglePause() {
-  paused = !paused;
-  $("pauseBtn").textContent = paused ? "▶ retomar" : "⏸ pausar";
-  $("pauseBtn").classList.toggle("on", !paused);
-  setStatus(paused ? "pausado (tempo continua contando offline)" : "pescando ao vivo");
-}
-
-async function tick() { if (!live || paused) return; await resolve(0); }
-async function ff(seconds) { if (!live) return; await resolve(seconds); }
-
-let resolving = false;
-async function resolve(ff) {
-  if (resolving) return; resolving = true;
-  try {
-    const rv = await jpost(`/api/players/${PID}/session/resolve?ff=${ff}`);
-    renderSession(rv.session);
-    renderSummary(rv.player);
-    appendEvents(rv.events);
-    if (ff > 0) setStatus(`fast-forward +${ff/3600}h: +${rv.result.Gold} ouro, +${rv.result.XP} xp, ${(rv.result.Trophies||[]).length} troféus`);
-    else if (!paused) setStatus("pescando ao vivo");
-    await reloadPlayer(); // mantém inventário/troféus/build vivos
-  } catch (e) { setStatus("erro no tick: " + e.message, "bad"); }
-  finally { resolving = false; }
-}
-
-function renderSession(v) {
-  $("sessLoc").textContent = `${v.locationId} ${v.locationName}`;
-  $("sessWeather").innerHTML = v.weather === "storm" ? "⛈️ tempestade" : "☀️ tempo limpo";
-  $("sessTime").textContent = fmtDur(v.elapsedSec);
-  $("sessDur").innerHTML = `${v.durability.toFixed(0)}/${v.maxDurability.toFixed(0)}` + (v.broken ? ` <span class="bad">QUEBRADO</span>` : "");
-  $("sessBait").innerHTML = v.baitBasic ? `<span class="bad">básica</span>` : `${v.baitId} ${v.baitKind === "consumable" ? "(" + v.baitCharges + " cargas)" : ""}`;
-  $("sessBag").textContent = `${v.backpackCount}/${v.backpackCap}`;
-}
-function renderSummary(p) {
-  $("prog").innerHTML = kv({ "ouro": p.gold, "nível": p.level, "xp": p.xp, "pontos de skill": p.skillPoints });
-}
-
-function appendEvents(events) {
-  if (!events || !events.length) return;
-  const feed = $("feed");
-  if (feed.classList.contains("muted")) { feed.classList.remove("muted"); feed.innerHTML = ""; }
-  events.forEach(ev => {
-    const div = document.createElement("div"); div.className = "ev";
-    div.innerHTML = evLine(ev); feed.prepend(div);
+  TPL = await (await fetch('/api/templates')).json();
+  WORLDS = await (await fetch('/api/worlds')).json();
+  // classes no login
+  const cc = $('classes'); cc.innerHTML='';
+  Object.values(TPL.classes).forEach((c,i) => {
+    const el = document.createElement('div'); el.className='classCard'+(i===0?' sel':'');
+    el.innerHTML = `<b>${c.Name}</b><small>${c.Description||''}</small>`;
+    el.onclick = ()=>{ document.querySelectorAll('.classCard').forEach(x=>x.classList.remove('sel')); el.classList.add('sel'); selectedClass=c.ID; };
+    if(i===0) selectedClass=c.ID;
+    cc.appendChild(el);
   });
-  while (feed.childNodes.length > 300) feed.removeChild(feed.lastChild);
-}
-function evLine(ev) {
-  const t = `[${fmtDur(ev.atSec)}]`;
-  if (ev.kind !== "catch") return `<span class="escape">${t} ✗ escapou ${ev.fish}</span>`;
-  if (ev.trophy) return `<span class="trophyline">${t} 🏆 ${ev.fish} — ${ev.trophy.quality} ${ev.trophy.weight.toFixed(2)}kg</span>`;
-  if (ev.material) return `<span class="matline">${t} 🐟 ${ev.fish} → material ${ev.material}</span>`;
-  if (ev.gold) return `<span class="catch">${t} 🐟 ${ev.fish} → +${ev.gold} ouro</span>`;
-  return `<span class="runeline">${t} ✨ ${ev.fish} → runa</span>`;
+  // locais
+  const ls = $('loc'); ls.innerHTML='';
+  WORLDS.forEach(w => (w.Locations||[]).forEach(l => { const o=document.createElement('option'); o.value=l.ID; o.textContent=`${l.Name} · nv ${l.Level}`; ls.appendChild(o); }));
+  $('name').value = localStorage.getItem('fh_name') || 'Pescador';
 }
 
-// ---- estado completo do jogador ----
-async function reloadPlayer() { if (!PID) return; try { renderPlayer(await jget("/api/players/" + PID)); } catch (e) {} }
-function renderPlayer(p) {
-  $("noPlayer").style.display = "none"; $("hasPlayer").style.display = "";
-  $("pid").textContent = p.ID; $("pName").textContent = p.Name; $("pClass").textContent = `classe: ${p.Class}`;
-  renderSummary({ gold: p.Gold, level: p.Level, xp: p.XP, skillPoints: p.SkillPoints });
-
-  const eq = [p.EquippedRod, p.EquippedReel, p.EquippedLine].filter(Boolean);
-  const total = sumStats(p.BaseStats, eq);
-  $("build").innerHTML = `<table><tr><th>atributo</th><th>base</th><th>+equip</th></tr>` +
-    STATKEYS.map(k => `<tr><td>${k}</td><td class="num">${fmt(p.BaseStats[k])}</td><td class="num good">${fmt(total[k])}</td></tr>`).join("") +
-    `</table><div class="muted" style="padding:8px 12px">multiplicadores de classe/skill são aplicados pelo servidor ao pescar.</div>`;
-
-  $("equip").innerHTML = eq.length ? `<table><tr><th>slot</th><th>item</th><th>durab.</th><th>bônus</th></tr>` +
-    eq.map(e => `<tr><td>${e.Type}</td><td>${e.TemplateID}</td><td>${e.Durability.toFixed(0)}/${e.MaxDurability.toFixed(0)}</td><td class="muted">${statSummary(e.Bonus)}</td></tr>`).join("") + `</table>`
-    : `<div class="pad muted">sem equipamento</div>`;
-
-  const t2 = (o) => Object.entries(o || {}).map(([k,v]) => `<tr><td class="key">${k}</td><td class="num">${v}</td></tr>`).join("");
-  $("inv").innerHTML =
-    `<b>materiais</b><table>${t2(p.Materials) || '<tr><td class="muted">—</td></tr>'}</table>` +
-    `<b style="margin-top:8px;display:block">runas</b><table>${t2(p.Runes) || '<tr><td class="muted">—</td></tr>'}</table>` +
-    `<b style="margin-top:8px;display:block">skill tree</b><table>${Object.entries(p.SkillTree||{}).map(([k,v])=>`<tr><td class="key">${k}</td><td class="num">rank ${v}</td></tr>`).join("") || '<tr><td class="muted">— sem pontos investidos —</td></tr>'}</table>`;
-
-  renderTrophies(p.Trophies || []);
+// ---------- login ----------
+function devSteamId(){ let s=localStorage.getItem('fh_steamid'); if(!s){ s='dev-'+Math.random().toString(36).slice(2,10)+Date.now(); localStorage.setItem('fh_steamid',s);} return s; }
+async function play() {
+  const name = $('name').value || 'Pescador'; localStorage.setItem('fh_name', name);
+  try {
+    const res = await api('POST','/api/auth/steam',{ ticket: devSteamId(), name, class: selectedClass });
+    TOKEN = res.token; localStorage.setItem('fh_token', TOKEN);
+    $('login').style.display='none'; $('app').style.display='block';
+    renderPlayer(res.player);
+    if (res.offline) showOffline(res.offline);
+    showSelect();
+  } catch(e){ toast('erro: '+e.message); }
 }
-function renderTrophies(tr) {
-  const order = ["perfect","legendary","epic","rare","common"]; const byQ = {}; order.forEach(q => byQ[q]=0);
-  tr.forEach(t => byQ[t.quality] = (byQ[t.quality]||0)+1);
-  const counts = order.filter(q => byQ[q]).map(q => `<span class="pill ${q}">${q} ×${byQ[q]}</span>`).join(" ") || `<span class="muted">nenhum troféu ainda</span>`;
-  const recent = tr.slice(0, 25).map(t => `<tr><td class="${t.quality}">${t.quality}</td><td>${t.speciesId}</td><td class="num">${t.weight.toFixed(2)} kg</td><td class="muted">${t.caughtLocationId||""}</td></tr>`).join("");
-  $("trophies").innerHTML = `<div class="pad">${counts}</div>` + (recent ? `<table><tr><th>faixa</th><th>espécie</th><th>peso</th><th>local</th></tr>${recent}</table>` : "");
+function logout(){ stopAnim(); if(ws){ws.close(); ws=null;} TOKEN=''; localStorage.removeItem('fh_token'); $('app').style.display='none'; $('login').style.display='grid'; }
+
+function showOffline(o){
+  $('offHours').textContent = `você ficou ~${o.hours.toFixed(1)}h ausente`;
+  $('offGold').textContent = `+${o.gold} ⦿`; $('offXp').textContent = `+${o.xp} XP`;
+  $('offline').style.display='grid';
 }
 
-// ---- helpers ----
-const STATKEYS = ["FishingPower","ReelForce","LineTension","RodHeight","BaitSpeed","DoubleCatchChance","LuckChance","LuckPower","EscapeReduction"];
-function sumStats(base, eqs) { const t = Object.assign({}, base); eqs.forEach(e => STATKEYS.forEach(k => t[k] = (t[k]||0) + (e.Bonus?.[k]||0))); return t; }
-function statSummary(s) { return STATKEYS.filter(k => s?.[k]).map(k => `${k} +${fmt(s[k])}`).join(", ") || "—"; }
-function kv(o) { return Object.entries(o).map(([k,v]) => `<div class="muted">${k}</div><div class="num">${v}</div>`).join(""); }
-function fmt(n) { n = n || 0; return Number.isInteger(n) ? n : n.toFixed(2); }
-function fmtDur(s) { s = Math.floor(s||0); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60; return (h?`${h}h`:"") + (h||m?`${String(m).padStart(2,"0")}m`:"") + `${String(x).padStart(2,"0")}s`; }
+// ---------- views ----------
+function showSelect(){ $('selectView').style.display='block'; $('fishView').style.display='none'; }
+function showFishing(){ $('selectView').style.display='none'; $('fishView').style.display='block'; }
 
-window.addEventListener("beforeunload", stopLoop);
+async function enter(){
+  const ar = $('autorepair').checked;
+  try {
+    await api('POST', `/api/me/session/start?location=${$('loc').value}&autorepair=${ar}`);
+    $('feed').innerHTML=''; resetAnim(); showFishing(); openWS(); startAnim();
+  } catch(e){ toast('erro: '+e.message); }
+}
+async function leave(){
+  stopAnim(); closeWS();
+  try { await api('POST','/api/me/session/stop'); } catch(e){}
+  showSelect();
+  try { renderPlayer(await api('GET','/api/me')); } catch(e){}
+  toast('progresso salvo');
+}
+async function ff(sec){ try { const rv = await api('POST',`/api/me/session/claim?ff=${sec}`); applyState(rv.session, rv.player); toast(`+${rv.result.Gold} ⦿, +${rv.result.XP} XP em ${sec/3600}h`); } catch(e){ toast('erro: '+e.message); } }
+
+// ---------- websocket ----------
+function openWS(){
+  const proto = location.protocol==='https:'?'wss':'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws?token=${TOKEN}`);
+  ws.onopen = ()=> $('wsState').textContent='● ao vivo';
+  ws.onclose = ()=> { $('wsState').textContent='○ desconectado'; };
+  ws.onerror = ()=> $('wsState').textContent='erro';
+  ws.onmessage = (m)=>{ const msg=JSON.parse(m.data);
+    if(msg.type==='state'){ applyState(msg.session, msg.player); }
+    else if(msg.type==='events'){ (msg.events||[]).forEach(e=>anim.q.push(e)); } // enfileira p/ revelar no tempo certo
+    else if(msg.type==='idle'){ /* sessão encerrada externamente */ }
+  };
+}
+function closeWS(){ if(ws){ ws.onclose=null; ws.close(); ws=null; } }
+
+// ---------- animação (replay da linha do tempo + contadores suaves) ----------
+// O servidor resolve a verdade e manda os eventos com `atSec`; o cliente os
+// REPRODUZ localmente no instante certo e interpola ouro/XP — fluido e
+// independente da rede (não espera o servidor por quadro).
+let anim = null;
+function resetAnim(){ anim = { clock:0, tElapsed:0, gold:0, tGold:0, xp:0, tXp:0, baseGold:null, baseXp:null, lvl:1, q:[], raf:0, last:0 }; catchCount=0; trophCount=0; $('dCatch').textContent=0; $('dTroph').textContent=0; }
+function startAnim(){ if(!anim) resetAnim(); anim.last=performance.now(); anim.raf=requestAnimationFrame(frame); }
+function stopAnim(){ if(anim&&anim.raf) cancelAnimationFrame(anim.raf); if(anim) anim.raf=0; }
+
+function applyState(s, p){
+  if(!s || s.active===false || !anim) return;
+  // metas (o frame interpola até elas)
+  anim.tElapsed = s.elapsedSec; anim.tGold = p.gold; anim.tXp = p.xp; anim.lvl = p.level;
+  if(anim.baseGold===null){ anim.baseGold=p.gold; anim.baseXp=p.xp; anim.gold=p.gold; anim.xp=p.xp; anim.clock=s.elapsedSec; }
+  // imediato (não precisa de pacing)
+  $('hLvl').textContent = `nv ${p.level}`;
+  const storm = s.weather==='storm';
+  $('scene').classList.toggle('storm', storm); $('sceneSun').textContent = storm?'⛈️':'☀️';
+  $('hWeather').textContent = storm?'⛈️ tempestade':'☀️ tempo limpo';
+  setBar('barDur', s.durability, s.maxDurability, s.broken?'var(--bad)': (s.durability/s.maxDurability<.3?'var(--gold)':'var(--good)'));
+  if(s.baitKind==='consumable'){ setBar('barBait', s.baitCharges, 500); $('baitTxt').textContent = s.baitBasic?'isca básica':`${s.baitCharges} cargas`; }
+  else { setBar('barBait', 1,1); $('baitTxt').textContent = s.baitBasic?'isca básica':'durável'; }
+  setBar('barBag', s.backpackCount, s.backpackCap, s.backpackCount>=s.backpackCap?'var(--bad)':'var(--xp)');
+}
+
+function frame(ts){
+  if(!anim){ return; }
+  const dt = Math.min(0.1, (ts - anim.last)/1000); anim.last = ts;
+  // relógio: avança em tempo real até a meta; salto grande (ff/reconexão) → não reproduz tudo
+  if(anim.tElapsed - anim.clock > 8) anim.clock = anim.tElapsed - 1.5;
+  else anim.clock = Math.min(anim.clock + dt, anim.tElapsed);
+  // revela eventos cujo atSec já chegou
+  let guard=0;
+  while(anim.q.length && anim.q[0].atSec <= anim.clock && guard++ < 50) addEvent(anim.q.shift());
+  // interpola ouro/XP (convergência exponencial)
+  const k = Math.min(1, dt*4);
+  anim.gold += (anim.tGold - anim.gold)*k; anim.xp += (anim.tXp - anim.xp)*k;
+  const g=Math.round(anim.gold), x=Math.round(anim.xp);
+  $('hGold').textContent = `${g} ⦿`;
+  $('hXp').style.width = ((x % 1000)/10) + '%';
+  $('dGold').textContent = Math.max(0, g - (anim.baseGold||0));
+  $('dXp').textContent = Math.max(0, x - (anim.baseXp||0));
+  $('elapsed').textContent = fmtDur(anim.clock);
+  anim.raf = requestAnimationFrame(frame);
+}
+function setBar(id,val,max,color){ const pct=max>0?Math.max(0,Math.min(100,val/max*100)):0; const el=$(id); el.style.width=pct+'%'; if(color) el.style.background=color; }
+
+let catchCount=0, trophCount=0;
+function addEvent(ev){
+  const feed=$('feed'); if(feed.querySelector('.muted')) feed.innerHTML='';
+  const d=document.createElement('div');
+  if(ev.kind!=='catch'){ d.className='ev escape'; d.innerHTML=`<div class="ic">🌊</div><div class="tx">escapou <b>${ev.fish}</b></div>`; }
+  else {
+    catchCount++; $('dCatch').textContent=catchCount;
+    if(ev.trophy){ trophCount++; $('dTroph').textContent=trophCount;
+      popScene('🏆');
+      d.className='ev trophy';
+      d.innerHTML=`<div class="ic">🏆</div><div class="tx"><b>${ev.fish}</b> <small>${ev.trophy.weight.toFixed(2)}kg</small></div><div class="amt q ${ev.trophy.quality}">${ev.trophy.quality}</div>`;
+    } else if(ev.material){ d.className='ev'; d.innerHTML=`<div class="ic">🧩</div><div class="tx"><b>${ev.fish}</b> <small>→ material</small></div><div class="amt muted">${ev.material}</div>`; }
+    else if(ev.gold){ popScene('🐟'); d.className='ev'; d.innerHTML=`<div class="ic">🐟</div><div class="tx"><b>${ev.fish}</b></div><div class="amt gold">+${ev.gold} ⦿</div>`; }
+    else { d.className='ev'; d.innerHTML=`<div class="ic">✨</div><div class="tx"><b>${ev.fish}</b> <small>→ runa</small></div>`; }
+  }
+  feed.prepend(d);
+  while(feed.childNodes.length>120) feed.removeChild(feed.lastChild);
+}
+function popScene(icon){ const p=$('catchpop'); p.textContent=icon; p.classList.remove('show'); void p.offsetWidth; p.classList.add('show'); }
+
+function renderPlayer(p){
+  $('hPersona').textContent = p.Name; $('hGold').textContent = `${p.Gold} ⦿`;
+  $('hLvl').textContent = `nv ${p.Level}`; $('hXp').style.width = ((p.XP%1000)/10)+'%';
+  catchCount=0; trophCount=0; $('dCatch').textContent=0; $('dTroph').textContent=0; $('dGold').textContent=0; $('dXp').textContent=0;
+  const eq = [p.EquippedRod,p.EquippedReel,p.EquippedLine].filter(Boolean).map(e=>e.TemplateID).join(', ');
+  $('charKv').innerHTML =
+    `<div class="k">classe</div><div>${p.Class}</div>`+
+    `<div class="k">ouro</div><div class="gold">${p.Gold} ⦿</div>`+
+    `<div class="k">nível</div><div>${p.Level} <span class="muted">(${p.SkillPoints} pts skill)</span></div>`+
+    `<div class="k">equipado</div><div>${eq||'—'}</div>`+
+    `<div class="k">materiais</div><div>${Object.entries(p.Materials||{}).map(([k,v])=>`${k}×${v}`).join(', ')||'—'}</div>`+
+    `<div class="k">runas</div><div>${Object.entries(p.Runes||{}).map(([k,v])=>`${k}×${v}`).join(', ')||'—'}</div>`;
+  const tr = p.Trophies||[];
+  $('trophCount').textContent = `${tr.length}`;
+  $('trophies').innerHTML = tr.length ? tr.slice(0,40).map(t=>
+    `<div class="tcard"><div class="q ${t.quality}">${t.quality}</div><div>${t.speciesId}</div><div class="muted">${t.weight.toFixed(2)} kg · ${t.caughtLocationId||''}</div></div>`).join('')
+    : '<span class="muted">nenhum troféu ainda — pesque espécimes grandes!</span>';
+}
+
+function fmtDur(s){ s=Math.floor(s||0); const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60; return (h?h+'h':'')+(h||m?String(m).padStart(2,'0')+'m':'')+String(x).padStart(2,'0')+'s'; }
+
+window.addEventListener('beforeunload', closeWS);
 boot();
 </script>
 </body>
