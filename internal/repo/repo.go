@@ -11,18 +11,29 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Store agrega os recursos de infraestrutura (fonte da verdade + cache).
-type Store struct {
-	Pool  *pgxpool.Pool
-	Redis *redis.Client
+// PoolOptions — parâmetros de dimensionamento do pool do Postgres.
+type PoolOptions struct {
+	MaxConns int32
+	MinConns int32
 }
 
-// NewPool abre o pool do Postgres, tolerando o serviço ainda subindo (compose).
-func NewPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+// NewPool abre o pool do Postgres dimensionado para concorrência alta,
+// tolerando o serviço ainda subindo (docker compose / orquestrador).
+func NewPool(ctx context.Context, dsn string, opt PoolOptions) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("DSN inválida: %w", err)
 	}
+	if opt.MaxConns > 0 {
+		cfg.MaxConns = opt.MaxConns
+	}
+	if opt.MinConns > 0 {
+		cfg.MinConns = opt.MinConns
+	}
+	cfg.MaxConnLifetime = time.Hour
+	cfg.MaxConnIdleTime = 30 * time.Minute
+	cfg.HealthCheckPeriod = time.Minute
+
 	var lastErr error
 	for i := 0; i < 30; i++ {
 		pool, err := pgxpool.NewWithConfig(ctx, cfg)
@@ -57,4 +68,17 @@ func NewRedis(ctx context.Context, addr string) (*redis.Client, error) {
 		return nil, fmt.Errorf("não conectou no Redis: %w", err)
 	}
 	return c, nil
+}
+
+// Ping verifica a saúde das dependências (readiness probe).
+func Ping(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client) error {
+	if err := pool.Ping(ctx); err != nil {
+		return fmt.Errorf("postgres: %w", err)
+	}
+	if rdb != nil {
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			return fmt.Errorf("redis: %w", err)
+		}
+	}
+	return nil
 }

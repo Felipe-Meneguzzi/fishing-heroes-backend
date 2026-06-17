@@ -15,6 +15,11 @@ import (
 // ErrNoSession — não há sessão de pesca ativa para o jogador.
 var ErrNoSession = errors.New("nenhuma sessão de pesca ativa")
 
+// ErrStaleClaim — a âncora da sessão mudou entre o resolve e o commit (claim
+// concorrente). O cliente deve reconsultar (preview) e tentar de novo. Evita
+// double-credit quando dois claims do mesmo jogador correm em paralelo.
+var ErrStaleClaim = errors.New("claim obsoleto — âncora da sessão avançou")
+
 // SessionRow — espelho da linha fishing_session (estado vivo da pesca Idle).
 type SessionRow struct {
 	PlayerID        string
@@ -90,8 +95,16 @@ func DeleteSession(ctx context.Context, pool *pgxpool.Pool, playerID string) err
 // SaveResolve persiste, numa única transação (ARCHITECTURE §7.6): os deltas do
 // Resolve (ouro líquido de reparos, XP/nível, materiais, troféus, runas) E o
 // avanço da sessão (índice/tempo/durabilidade/isca/mochila).
+// EquipmentInsert — instância de equipamento a inserir no stash (drop da pesca).
+type EquipmentInsert struct {
+	TemplateID    string
+	Type          string
+	Bonus         []byte // JSON de domain.Stats (rolado server-seeded)
+	MaxDurability float64
+}
+
 func SaveResolve(ctx context.Context, pool *pgxpool.Pool, playerID string, res domain.ResolveResult,
-	newLevel, addedSkillPoints int, newHighestLoc string, after SessionRow) error {
+	newLevel, addedSkillPoints int, newHighestLoc string, after SessionRow, expectedIndex int, equips []EquipmentInsert) error {
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -139,13 +152,30 @@ func SaveResolve(ctx context.Context, pool *pgxpool.Pool, playerID string, res d
 		}
 	}
 
-	if _, err := tx.Exec(ctx, `UPDATE fishing_session
+	// Drops de equipamento (instâncias no stash, com stats rolados server-seeded).
+	for _, eq := range equips {
+		if _, err := tx.Exec(ctx, `INSERT INTO player_equipment
+			(player_id, template_id, type, bonus_stats, durability, max_durability, equipped_slot)
+			VALUES ($1,$2,$3,$4,$5,$5,NULL)`,
+			playerID, eq.TemplateID, eq.Type, eq.Bonus, eq.MaxDurability); err != nil {
+			return err
+		}
+	}
+
+	// Guarda otimista: só avança se a âncora (last_index) ainda for a que
+	// resolvemos. Se outro claim concorrente já avançou, RowsAffected = 0 e a
+	// transação inteira (inclusive o crédito de ouro) é desfeita.
+	tag, err := tx.Exec(ctx, `UPDATE fishing_session
 		SET start_time = $2, last_index = $3, last_time = $4, backpack_count = $5,
 		    durability = $6, broken = $7, bait_charges_left = $8, bait_durability = $9
-		WHERE player_id = $1`,
+		WHERE player_id = $1 AND last_index = $10`,
 		playerID, after.StartTime, after.LastIndex, after.LastTime, after.BackpackCount,
-		after.Durability, after.Broken, after.BaitChargesLeft, after.BaitDurability); err != nil {
+		after.Durability, after.Broken, after.BaitChargesLeft, after.BaitDurability, expectedIndex)
+	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrStaleClaim
 	}
 
 	return tx.Commit(ctx)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,9 +31,9 @@ var StarterKit = struct {
 	StartLocation:  "1-1",
 }
 
-// CreatePlayer cria um jogador com a Classe escolhida e o kit inicial completo
-// (vara/molinete/linha, iscas, pet), tudo numa transação.
-func CreatePlayer(ctx context.Context, pool *pgxpool.Pool, t *Templates, name, class string) (string, error) {
+// CreatePlayer cria um jogador (vinculado a uma conta) com a Classe escolhida e
+// o kit inicial completo (vara/molinete/linha, iscas, pet), tudo numa transação.
+func CreatePlayer(ctx context.Context, pool *pgxpool.Pool, t *Templates, accountID, name, class string) (string, error) {
 	cls, ok := t.Classes[class]
 	if !ok {
 		return "", fmt.Errorf("classe inválida: %s", class)
@@ -49,9 +50,9 @@ func CreatePlayer(ctx context.Context, pool *pgxpool.Pool, t *Templates, name, c
 	defer tx.Rollback(ctx)
 
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO players (name, class, base_stats, active_bait_id, highest_location_id)
-		VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-		name, class, baseStats, StarterKit.ConsumableBait, StarterKit.StartLocation).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO players (account_id, name, class, base_stats, active_bait_id, highest_location_id)
+		VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+		nullIfEmpty(accountID), name, class, baseStats, StarterKit.ConsumableBait, StarterKit.StartLocation).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("insert player: %w", err)
 	}
@@ -139,10 +140,61 @@ func GetPlayer(ctx context.Context, pool *pgxpool.Pool, id string) (*domain.Play
 	if err := loadEquipped(ctx, pool, p); err != nil {
 		return nil, err
 	}
+	if err := loadStashEquipment(ctx, pool, p); err != nil {
+		return nil, err
+	}
 	if err := loadInventory(ctx, pool, p); err != nil {
 		return nil, err
 	}
 	return p, nil
+}
+
+// PlayerBaseline — campos do jogador necessários no loop de pesca (sem carregar
+// inventário/troféus). É uma única leitura por PK — barata o bastante para o
+// caminho quente de 1000+ jogadores.
+type PlayerBaseline struct {
+	Gold              int64
+	XP                int64
+	Level             int
+	SkillPoints       int
+	HighestLocationID string
+	Filters           []domain.FilterRule
+	LastLogout        *time.Time
+}
+
+// GetPlayerBaseline lê só a linha players (sem joins de inventário).
+func GetPlayerBaseline(ctx context.Context, pool *pgxpool.Pool, id string) (*PlayerBaseline, error) {
+	b := &PlayerBaseline{}
+	var filters []byte
+	var highestLoc *string
+	err := pool.QueryRow(ctx, `SELECT gold, xp, level, skill_points, highest_location_id, filters, last_logout
+		FROM players WHERE id = $1`, id).Scan(&b.Gold, &b.XP, &b.Level, &b.SkillPoints, &highestLoc, &filters, &b.LastLogout)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrPlayerNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if highestLoc != nil {
+		b.HighestLocationID = *highestLoc
+	}
+	_ = json.Unmarshal(filters, &b.Filters)
+	return b, nil
+}
+
+// ApplyOfflineReward credita a recompensa de catch-up e consome o last_logout.
+func ApplyOfflineReward(ctx context.Context, pool *pgxpool.Pool, playerID string, gold, xp int64, newLevel, addedPoints int) error {
+	_, err := pool.Exec(ctx, `UPDATE players
+		SET gold = gold + $2, xp = xp + $3, level = $4, skill_points = skill_points + $5,
+		    last_logout = NULL, updated_at = now()
+		WHERE id = $1`, playerID, gold, xp, newLevel, addedPoints)
+	return err
+}
+
+// TouchLogout marca o instante em que o jogador parou (base do catch-up offline).
+func TouchLogout(ctx context.Context, pool *pgxpool.Pool, playerID string) error {
+	_, err := pool.Exec(ctx, `UPDATE players SET last_logout = now() WHERE id = $1`, playerID)
+	return err
 }
 
 func loadEquipped(ctx context.Context, pool *pgxpool.Pool, p *domain.Player) error {
@@ -208,8 +260,8 @@ func loadInventory(ctx context.Context, pool *pgxpool.Pool, p *domain.Player) er
 	}
 	runeRows.Close()
 
-	trRows, err := pool.Query(ctx, `SELECT species_id, weight, quality, caught_location_id
-		FROM player_trophies WHERE player_id = $1 ORDER BY caught_at DESC LIMIT 200`, p.ID)
+	trRows, err := pool.Query(ctx, `SELECT id, species_id, weight, quality, caught_location_id
+		FROM player_trophies WHERE player_id = $1 AND on_market = false ORDER BY caught_at DESC LIMIT 200`, p.ID)
 	if err != nil {
 		return err
 	}
@@ -218,7 +270,7 @@ func loadInventory(ctx context.Context, pool *pgxpool.Pool, p *domain.Player) er
 		var tr domain.TrophyInstance
 		var q string
 		var loc *string
-		if err := trRows.Scan(&tr.SpeciesID, &tr.Weight, &q, &loc); err != nil {
+		if err := trRows.Scan(&tr.ID, &tr.SpeciesID, &tr.Weight, &q, &loc); err != nil {
 			return err
 		}
 		tr.Quality = domain.QualityTier(q)
@@ -228,6 +280,29 @@ func loadInventory(ctx context.Context, pool *pgxpool.Pool, p *domain.Player) er
 		p.Trophies = append(p.Trophies, tr)
 	}
 	return trRows.Err()
+}
+
+// loadStashEquipment carrega equipamentos no stash (não equipados, fora do mercado).
+func loadStashEquipment(ctx context.Context, pool *pgxpool.Pool, p *domain.Player) error {
+	rows, err := pool.Query(ctx, `SELECT id, template_id, type, bonus_stats, durability, max_durability
+		FROM player_equipment WHERE player_id = $1 AND equipped_slot IS NULL AND on_market = false
+		ORDER BY type LIMIT 200`, p.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		eq := &domain.EquipmentInstance{}
+		var bonus []byte
+		if err := rows.Scan(&eq.InstanceID, &eq.TemplateID, &eq.Type, &bonus, &eq.Durability, &eq.MaxDurability); err != nil {
+			return err
+		}
+		if eq.Bonus, err = parseStats(bonus); err != nil {
+			return err
+		}
+		p.StashEquipment = append(p.StashEquipment, eq)
+	}
+	return rows.Err()
 }
 
 func nullIfEmpty(s string) *string {
